@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Delivery Note System — SULB</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#e8edf2;font-family:'Segoe UI',sans-serif;color:#1e3a8a;min-height:100vh}
+input,select{width:100%;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:12px 13px;color:#1e3a8a;font-size:15px;outline:none;box-sizing:border-box;min-height:48px;height:48px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+input::placeholder{color:#9ab}
+input[readonly]{background:rgba(30,58,138,0.06);border-color:rgba(30,58,138,0.3);color:#1e3a8a;font-weight:700}
+button{cursor:pointer}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.live{display:inline-block;background:rgba(0,200,100,0.15);border:1px solid rgba(0,200,100,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#059669;font-weight:700;margin-left:8px;animation:pulse 2s infinite}
+.topbar{background:#1e3a8a;padding:12px 20px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(30,58,138,0.3)}
+.logo-img{height:38px;object-fit:contain}
+.logo-txt{font-size:8px;font-weight:800;color:rgba(255,255,255,0.7);letter-spacing:3px;text-transform:uppercase;text-align:center;margin-top:2px}
+.wrap{max-width:780px;margin:0 auto;padding:20px 14px}
+.card{background:#fff;border:1px solid rgba(30,58,138,0.15);border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 2px 10px rgba(30,58,138,0.08)}
+.sub{background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.18);border-radius:10px;padding:12px;margin-bottom:10px}
+.card-title{font-size:12px;font-weight:800;color:#1e3a8a;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+.sub-title{font-size:10px;font-weight:800;color:#1a2f6e;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.lbl{font-size:11px;color:#4a6080;margin-bottom:3px;display:block;font-weight:600}
+.row-card{background:#f8fafc;border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.row-card.dup{border-color:rgba(220,38,38,0.4);background:rgba(220,38,38,0.04)}
+.row-card.notfound{border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.04)}
+.row-card.autofilled{border-color:rgba(16,185,129,0.4);background:rgba(16,185,129,0.04)}
+.row-card.reserved{border-color:rgba(139,92,246,0.4);background:rgba(139,92,246,0.04)}
+.bp{background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:13px 28px;color:#fff;font-weight:700;font-size:15px;width:100%;margin-top:6px;box-shadow:0 4px 12px rgba(30,58,138,0.25)}
+.bs{background:#fff;border:1px solid rgba(30,58,138,0.25);border-radius:10px;padding:10px 18px;color:#1e3a8a;font-weight:600;font-size:13px}
+.ba{background:rgba(59,130,246,0.06);border:1px dashed rgba(59,130,246,0.4);border-radius:10px;padding:11px;color:#3b82f6;font-weight:600;font-size:13px;width:100%;margin-bottom:10px}
+.br{background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:6px;padding:4px 10px;color:#dc2626;font-size:11px;font-weight:600}
+.bc{background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:4px 10px;color:#2563eb;font-size:11px;font-weight:600}
+.bcl{background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:4px 10px;color:#d97706;font-size:11px;font-weight:600}
+.bx{background:linear-gradient(135deg,#1d6f42,#107c10);border:none;border-radius:10px;padding:9px 18px;color:#fff;font-weight:700;font-size:13px}
+.bd{background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:9px 16px;color:#dc2626;font-weight:700;font-size:13px}
+.blog{background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);border-radius:10px;padding:8px 14px;color:#d97706;font-weight:700;font-size:12px}
+.badge{display:inline-block;background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.2);border-radius:20px;padding:3px 10px;font-size:11px;color:#1e3a8a;margin-right:6px;font-weight:600}
+.warn{background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-top:8px;font-weight:600}
+.warn-yellow{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:8px 12px;font-size:12px;color:#d97706;margin-top:8px;font-weight:600}
+.warn-purple{background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.3);border-radius:8px;padding:8px 12px;font-size:12px;color:#7c3aed;margin-top:8px;font-weight:600}
+.info-green{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:8px 12px;font-size:12px;color:#059669;margin-top:8px;font-weight:600}
+.sbox{text-align:center;padding:30px 16px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:14px;margin-bottom:16px}
+.ebox{text-align:center;padding:48px 16px;background:#fff;border:1px solid rgba(30,58,138,0.1);border-radius:14px;margin-top:32px}
+.sc{flex:1;min-width:120px;background:#fff;border:1px solid rgba(30,58,138,0.15);border-radius:10px;padding:12px 16px;box-shadow:0 2px 8px rgba(30,58,138,0.06)}
+.dc{background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+table{width:100%;border-collapse:collapse}
+th{background:rgba(30,58,138,0.08);padding:7px 8px;text-align:left;color:#1e3a8a;border-bottom:1px solid rgba(30,58,138,0.15);font-size:11px;white-space:nowrap;font-weight:700}
+td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;font-size:11px}
+.mode-btn{flex:1;padding:12px;border-radius:10px;font-weight:700;font-size:14px;border:2px solid transparent}
+.mode-open{background:#fff;border-color:rgba(30,58,138,0.2);color:#1e3a8a}
+.mode-open.active{background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border-color:transparent}
+.mode-closed{background:#fff;border-color:rgba(16,185,129,0.3);color:#059669}
+.mode-closed.active{background:linear-gradient(135deg,#059669,#10b981);color:#fff;border-color:transparent}
+.search-box{background:#fff;border:2px solid rgba(30,58,138,0.3);border-radius:10px;padding:10px 14px;font-size:14px;color:#1e3a8a;width:100%;outline:none;box-shadow:0 2px 8px rgba(30,58,138,0.1)}
+.search-box:focus{border-color:#3b82f6}
+.search-result{background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.15);border-radius:10px;padding:14px;margin-top:10px}
+.piece-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#fff;border:1px solid rgba(30,58,138,0.1);border-radius:8px;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
+firebase.initializeApp({
+  apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",
+  authDomain:"delivery-note-sheet.firebaseapp.com",
+  projectId:"delivery-note-sheet",
+  storageBucket:"delivery-note-sheet.firebasestorage.app",
+  messagingSenderId:"150874743555",
+  appId:"1:150874743555:web:17b88acc92636639dd3f36"
+});
+const db=firebase.firestore();
+const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
+const WORKERS={
+  "001":"Jahanjeer","002":"Sadiq","003":"Fahad","004":"Jahedeedul",
+  "005":"Basheer","006":"Shamon","007":"Hanif","008":"Ball",
+  "009":"Arif","010":"Hakeem","011":"Ali Aflatoon","012":"Hisham",
+  "013":"Jasim","014":"Yousuf","015":"Elias","016":"Saeed Alhayki","017":"Shaheen"
+};
+let remarksOptions=["Transfer","Return","Scrap","Inventory","Other"];
+let SUPERVISORS={"S01":"Supervisor 1","S02":"Supervisor 2"};
+let dynamicSupervisors=Object.assign({},SUPERVISORS);
+let presenceInterval=null;
+let presenceId=null;
+let columnMapping=null;
+let pendingUploadRows=[];
+let pendingFileColumns=[];
+let showMappingScreen=false;
+
+const FIELD_DEFS=[
+  {key:"batchNo",label:"Batch No.",keywords:["batch"]},
+  {key:"heatNo",label:"Heat No.",keywords:["heat","ccm heat"]},
+  {key:"grade",label:"Grade",keywords:["grade","ccm grade"]},
+  {key:"length",label:"Length",keywords:["length","ccm length"]},
+  {key:"materialType",label:"Material Type",keywords:["product type","material","ccm product"]},
+  {key:"availableStock",label:"Available Stock",keywords:["available","avail","stock"]},
+  {key:"storageLocation",label:"Location From",keywords:["storage location","storage loc","location"]},
+  {key:"storageBin",label:"Storage Bin",keywords:["bin","storage bin"]}
+];
+
+function autoDetectColumns(cols){
+  var mapping={};
+  FIELD_DEFS.forEach(function(fd){
+    var found=cols.find(function(c){var cl=c.toLowerCase();return fd.keywords.some(function(k){return cl.includes(k);});});
+    mapping[fd.key]=found||"";
+  });
+  return mapping;
+}
+
+function er(){return{heatNo:"",strand:"",batchNo:"",rollingSize:"",materialType:"",rollingLot:"",grade:"",length:"",quantity:"",locationFrom:"",locationTo:"",remarks:"",autoFilled:false,notFound:false,alreadySubmitted:false,reserved:false,reservedBy:""};}
+function fmtTime(d){return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
+function fmtDate(d){return d.toISOString().slice(0,10);}
+function timeDiff(s,e){var diff=Math.floor((e-s)/1000);var h=Math.floor(diff/3600);var m=Math.floor((diff%3600)/60);var sc=diff%60;return(h>0?h+"h ":"")+m+"m "+sc+"s";}
+let allBatchNos=new Set();
+let startTime=null;
+let stockData={};
+let stockLastUpdate="";
+let listMode="open";
+let reservedBatches={};
+let myReservations=[];
+let searchQuery="";
+let S={
+  role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],
+  submitted:false,saving:false,timeTaken:"",
+  sessions:[],loading:false,delC:null,
+  hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},
+  rows:[er()],logoutMsg:false,supTab:"requests"
+};
+let unsub=null;
+let unsubReservations=null;
+
+async function loadAllBatchNos(){
+  try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){console.log(e);}
+}
+async function loadStockFromDB(){
+  try{
+    var snap=await db.collection("stock").get();
+    stockData={};
+    snap.docs.forEach(function(d){var data=d.data();if(data.batchNo)stockData[data.batchNo]=data;});
+    var meta=await db.collection("settings").doc("stockMeta").get();
+    stockLastUpdate=meta.exists?(meta.data().updatedAt||""):"";
+  }catch(e){console.log(e);}
+}
+async function loadListMode(){
+  try{const doc=await db.collection("settings").doc("listMode").get();if(doc.exists)listMode=doc.data().mode||"open";}catch(e){console.log(e);}
+}
+function listenReservations(){
+  if(unsubReservations)unsubReservations();
+  unsubReservations=db.collection("reservations").onSnapshot(function(snap){
+    reservedBatches={};
+    snap.docs.forEach(function(d){
+      var data=d.data();
+      var age=(Date.now()-(data.ts||0))/1000;
+      if(age<300)reservedBatches[d.id]={workerName:data.workerName,workerId:data.workerId};
+    });
+  });
+}
+async function reserveBatch(batch){
+  if(!batch)return;
+  try{
+    await db.collection("reservations").doc(batch).set({workerName:S.workerName,workerId:S.workerId,ts:Date.now(),date:fmtDate(new Date())});
+    if(!myReservations.includes(batch))myReservations.push(batch);
+  }catch(e){console.log(e);}
+}
+async function releaseMyReservations(){
+  for(var i=0;i<myReservations.length;i++){try{await db.collection("reservations").doc(myReservations[i]).delete();}catch(e){}}
+  myReservations=[];
+}
+function ss(u){Object.assign(S,u);draw();}
+function draw(){
+  var active=document.activeElement;
+  var activeId=active?active.id:null;
+  var activeDataR=active?active.dataset.r:null;
+  var activeDataF=active?active.dataset.f:null;
+  var activeCaret=active&&active.selectionStart!=null?active.selectionStart:null;
+  document.getElementById("app").innerHTML=html();
+  bind();
+  if(activeId){var el=document.getElementById(activeId);if(el){el.focus();if(activeCaret!=null){try{el.setSelectionRange(activeCaret,activeCaret);}catch(e){}}}}
+  else if(activeDataR!=null&&activeDataF!=null){
+    var inputs=document.querySelectorAll(".ri");
+    for(var i=0;i<inputs.length;i++){if(inputs[i].dataset.r===activeDataR&&inputs[i].dataset.f===activeDataF){inputs[i].focus();if(activeCaret!=null){try{inputs[i].setSelectionRange(activeCaret,activeCaret);}catch(e){}}break;}}
+  }
+}
+function html(){
+  if(S.logoutMsg)return logoutHTML();
+  if(!S.role)return loginHTML();
+  if(S.role==="worker"&&S.workerStep)return workerIdHTML();
+  if(S.role==="worker")return workerHTML();
+  if(S.role==="supervisor"&&S.supervisorStep)return supervisorIdHTML();
+  if(S.role==="supervisor"&&showMappingScreen)return mappingScreenHTML();
+  if(S.role==="supervisor")return supHTML();
+  if(S.role==="admin")return adminHTML();
+  return loginHTML();
+}
+
+
+function topbarW(){
+  var modeTag=listMode==="closed"?
+    '<span style="display:inline-block;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#6ee7b7;font-weight:700;margin-left:6px">&#128274; Closed List</span>':
+    '<span style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#93c5fd;font-weight:700;margin-left:6px">&#128275; Open List</span>';
+  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);color:#93c5fd">&#128119; '+S.workerName+'</span>'+modeTag+'<span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company | ID: '+S.workerId+'</p></div><button class="blog" id="btnLogout">&#128682; Logout</button></div>';
+}
+function topbarS(){
+  var sn=S.supervisorName?' <span style="background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;color:#93c5fd;margin-left:8px">&#128203; '+S.supervisorName+'</span>':'';
+  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Supervisor Panel<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff">&#128202; Supervisor</span><span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company — MS Logistics</p></div><button class="bs" id="btnOut" style="font-size:12px;padding:8px 14px;color:#1e3a8a">Sign Out</button></div>';
+}
+function loginHTML(){
+  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note System</p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company</p></div></div><div class="wrap" style="max-width:420px"><div style="text-align:center;margin:32px 0 24px"><div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px"><img src="'+LOGO+'" style="height:90px;object-fit:contain" alt="SULB"/><p style="font-size:10px;font-weight:800;color:#1e3a8a;letter-spacing:3px;text-transform:uppercase;margin-top:6px">MS LOGISTICS</p></div><h2 style="color:#1e3a8a;margin:0 0 6px;font-size:22px">Sign In</h2><p style="color:#4a6080;font-size:13px">Enter your credentials to continue</p></div><div class="card"><div style="margin-bottom:14px"><label class="lbl">Username</label><input id="iu" placeholder="Work / Super"/></div><div style="margin-bottom:6px"><label class="lbl">Password</label><div style="position:relative"><input id="ip" type="password" placeholder="Enter password" style="padding-right:40px"/><span id="tp" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;color:#4a6080">&#128065;</span></div></div><p id="le" style="color:#dc2626;font-size:12px;margin-top:6px;text-align:center;display:none">&#9888; Invalid username or password.</p><button class="bp" id="btnLogin" style="margin-top:16px">Sign In &#8594;</button></div></div>';
+}
+function workerIdHTML(){
+  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note System</p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company</p></div></div><div class="wrap" style="max-width:420px"><div style="text-align:center;margin:32px 0 24px"><div style="font-size:52px;margin-bottom:10px">&#128119;</div><h2 style="color:#1e3a8a;margin:0 0 6px">Enter Your ID</h2><p style="color:#4a6080;font-size:13px">Enter your worker ID number</p></div><div class="card"><label class="lbl">Worker ID</label><input id="wid" placeholder="e.g. 001" maxlength="3" style="font-size:24px;text-align:center;letter-spacing:8px;padding:14px"/>'+(S.workerIdErr?'<p style="color:#dc2626;font-size:12px;margin-top:8px;text-align:center">&#9888; '+S.workerIdErr+'</p>':'')+'<button class="bp" id="btnWid" style="margin-top:14px">Confirm ID</button></div></div>';
+}
+function logoutHTML(){
+  return '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e8edf2"><div style="text-align:center;padding:40px;background:#fff;border-radius:20px;box-shadow:0 8px 32px rgba(30,58,138,0.12);max-width:380px;width:90%"><img src="'+LOGO+'" style="height:70px;object-fit:contain;margin-bottom:8px"/><p style="font-size:10px;font-weight:800;color:#1e3a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:20px">MS LOGISTICS</p><div style="font-size:52px;margin-bottom:16px">&#128075;</div><h2 style="color:#1e3a8a;font-size:22px;margin-bottom:10px">Thank You!</h2><p style="color:#2d4a7a;font-size:15px;margin-bottom:6px">Your work has been recorded successfully.</p><p style="color:#4a6080;font-size:13px;margin-bottom:24px">Stay safe and take care. See you next shift!</p><div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:12px;padding:12px 20px;margin-bottom:20px"><p style="color:#059669;font-size:13px;font-weight:600">&#9989; Logged out successfully</p></div><button class="bp" id="btnBackLogin" style="width:auto;padding:12px 32px">Back to Login</button></div></div>';
+}
+function workerHTML(){
+  var rh=S.rows.map(function(row,i){
+    var batch=(row.heatNo||"")+(row.strand||"");
+    var isDupLocal=batch&&S.rows.filter(function(r,x){return x!==i&&((r.heatNo||"")+(r.strand||""))===batch;}).length>0;
+    var isAlreadySubmitted=row.alreadySubmitted;
+    var isNotFound=row.notFound;
+    var isAutoFilled=row.autoFilled;
+    var isReserved=row.reserved;
+    var cardClass="row-card"+(isAlreadySubmitted||isDupLocal?" dup":isReserved?" reserved":isNotFound?" notfound":isAutoFilled?" autofilled":"");
+    var statusMsg="";
+    if(isAlreadySubmitted) statusMsg='<div class="warn">&#9888; Batch No. <strong>'+batch+'</strong> was already submitted!</div>';
+    else if(isDupLocal) statusMsg='<div class="warn">&#9888; Batch No. <strong>'+batch+'</strong> duplicated in this request!</div>';
+    else if(isReserved) statusMsg='<div class="warn-purple">&#128274; Reserved by <strong>'+row.reservedBy+'</strong>. Choose a different piece.</div>';
+    else if(isNotFound&&batch.length>5) statusMsg='<div class="warn-yellow">&#10007; Batch No. <strong>'+batch+'</strong> not available in stock.</div>';
+    else if(isAutoFilled) statusMsg='<div class="info-green">&#10003; Details loaded.'+(stockData[batch]?' Available: <strong>'+parseFloat(stockData[batch].availableStock||0).toFixed(2)+' MT</strong> | Location: '+(stockData[batch].storageLocation||"--"):'')+'</div>';
+    return '<div class="'+cardClass+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+      '<span style="font-size:13px;font-weight:800;color:#1e3a8a">Piece #'+(i+1)+'</span>'+
+      '<div style="display:flex;gap:6px">'+
+      '<button class="bc" data-cp="'+i+'">&#128203; Copy</button>'+
+      '<button class="bcl" data-cl="'+i+'">&#10006; Clear</button>'+
+      (S.rows.length>1?'<button class="br" data-ri="'+i+'">Remove</button>':'')+
+      '</div></div>'+
+      '<div class="grid2" style="margin-bottom:8px">'+
+      '<div><label class="lbl">Rolling Size</label><input placeholder="e.g. HR500/25-25-1" value="'+(row.rollingSize||"")+'" data-r="'+i+'" data-f="rollingSize" class="ri"'+(row.autoFilled?' readonly':'')+'/></div>'+
+      '<div><label class="lbl">Material Type</label><input placeholder="e.g. BLT" value="'+(row.materialType||"")+'" data-r="'+i+'" data-f="materialType" class="ri"'+(row.autoFilled?' readonly':'')+'/></div>'+
+      '</div>'+
+      '<div class="sub"><div class="sub-title">Material Details</div>'+
+      '<div class="grid3" style="margin-bottom:8px">'+
+      '<div><label class="lbl">Heat No.</label><input placeholder="e.g. 1264133" value="'+(row.heatNo||"")+'" data-r="'+i+'" data-f="heatNo" class="ri" inputmode="numeric"/></div>'+
+      '<div><label class="lbl">Strand</label><input placeholder="e.g. C01" value="'+(row.strand||"")+'" data-r="'+i+'" data-f="strand" class="ri"/></div>'+
+      '<div><label class="lbl">Batch No.</label><input value="'+batch+'" readonly/></div>'+
+      '</div>'+
+      '<div class="grid3">'+
+      '<div><label class="lbl">Grade</label><input placeholder="e.g. HT02" value="'+(row.grade||"")+'" data-r="'+i+'" data-f="grade" class="ri"'+(row.autoFilled?' readonly':'')+'/></div>'+
+      '<div><label class="lbl">Length</label><input placeholder="e.g. 12.1" value="'+(row.length||"")+'" data-r="'+i+'" data-f="length" class="ri"'+(row.autoFilled?' readonly':'')+'/></div>'+
+      '<div><label class="lbl">Quantity (MT)</label><input placeholder="e.g. 1" value="'+(row.quantity||"")+'" data-r="'+i+'" data-f="quantity" class="ri"/></div>'+
+      '</div></div>'+
+      '<div class="sub"><div class="sub-title">Location</div>'+
+      '<div class="grid2">'+
+      '<div><label class="lbl">From</label><input placeholder="e.g. H030" value="'+(row.locationFrom||"")+'" data-r="'+i+'" data-f="locationFrom" class="ri"/></div>'+
+      '<div><label class="lbl">To</label><input placeholder="e.g. Melt" value="'+(row.locationTo||"")+'" data-r="'+i+'" data-f="locationTo" class="ri"/></div>'+
+      '</div></div>'+
+      '<div><label class="lbl">Remarks <span style="color:#dc2626">*</span></label><select data-r="'+i+'" data-f="remarks" class="ri" style="background:#fff"><option value="">-- Select Remark --</option>'+remarksOptions.map(function(opt){return '<option value="'+opt+'"'+( row.remarks===opt?' selected':'')+'>'+opt+'</option>';}).join("")+'</select></div>'+
+      statusMsg+'</div>';
+  }).join('');
+  var modeInfo=listMode==="closed"?
+    '<div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#059669;font-weight:600">&#128274; Closed List — Details auto-fill from inventory'+(stockLastUpdate?' | Updated: '+stockLastUpdate:'')+'</div>':
+    '<div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#2563eb;font-weight:600">&#128275; Open List — Enter all details manually</div>';
+  return topbarW()+'<div class="wrap">'+modeInfo+
+    (S.submitted?
+      '<div class="sbox"><div style="font-size:50px">&#9989;</div><h3 style="color:#059669;margin:10px 0 4px">Submitted Successfully!</h3><p style="color:#4a6080;font-size:13px">Data saved. Supervisor can see it now.</p><p style="color:#1e3a8a;font-weight:700">'+S.rows.filter(function(r){return r.heatNo;}).length+' piece(s) recorded</p><p style="color:#2563eb;font-size:13px;margin-top:8px">&#128336; Time taken: <strong>'+S.timeTaken+'</strong></p></div><button class="bp" id="btnNew">Enter New Request</button>'
+    :
+      '<div class="card"><div class="card-title">Request Information</div><div class="grid2">'+
+      '<div><label class="lbl">Sheet No.</label><input id="hs" value="'+S.hdr.sheetNo+'"/></div>'+
+      '<div><label class="lbl">Date</label><input readonly value="'+S.hdr.date+'"/></div>'+
+      '<div><label class="lbl">Operator Name</label><input readonly value="'+S.workerName+'"/></div>'+
+      '<div><label class="lbl">Starting Time</label><input readonly value="'+(S.hdr.startTime||"--:--:--")+'"/></div>'+
+      '</div></div>'+
+      '<div class="card"><div class="card-title">Pieces to Transfer</div>'+rh+
+      '<button class="ba" id="btnAdd">+ Add Another Piece</button></div>'+
+      '<button class="bp" id="btnSub"'+(S.saving?' disabled style="opacity:0.6"':'')+'>'+
+      (S.saving?'Saving...':'Submit &#10003;')+'</button>'
+    )+'</div>';
+}
+
+
+function supHTML(){
+  var tp=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);
+  var tabs='<div style="display:flex;gap:8px;margin-bottom:18px">'+
+    '<button id="tabReq" style="flex:1;padding:10px;border-radius:10px;font-weight:700;font-size:13px;border:none;cursor:pointer;background:'+(S.supTab==="requests"?"linear-gradient(135deg,#1e3a8a,#3b82f6)":"#fff")+';color:'+(S.supTab==="requests"?"#fff":"#1e3a8a")+';box-shadow:0 2px 8px rgba(30,58,138,0.1)">&#128203; Requests</button>'+
+    '<button id="tabStock" style="flex:1;padding:10px;border-radius:10px;font-weight:700;font-size:13px;border:none;cursor:pointer;background:'+(S.supTab==="stock"?"linear-gradient(135deg,#059669,#10b981)":"#fff")+';color:'+(S.supTab==="stock"?"#fff":"#059669")+';box-shadow:0 2px 8px rgba(16,185,129,0.1)">&#128196; Stock & Settings</button>'+
+    '<button id="tabSearch" style="flex:1;padding:10px;border-radius:10px;font-weight:700;font-size:13px;border:none;cursor:pointer;background:'+(S.supTab==="search"?"linear-gradient(135deg,#7c3aed,#a78bfa)":"#fff")+';color:'+(S.supTab==="search"?"#fff":"#7c3aed")+';box-shadow:0 2px 8px rgba(124,58,237,0.1)">&#128269; Search & Fix</button>'+
+    '</div>';
+
+  if(S.supTab==="search"){
+    var q=searchQuery.trim().toLowerCase();
+    var results=[];
+    if(q.length>2){
+      S.sessions.forEach(function(s){
+        (s.rows||[]).forEach(function(r,ri){
+          if((r.batchNo||"").toLowerCase().includes(q)||
+             (r.heatNo||"").toLowerCase().includes(q)||
+             (r.strand||"").toLowerCase().includes(q)){
+            results.push({session:s,row:r,rowIndex:ri});
+          }
+        });
+      });
+    }
+    return topbarS()+'<div class="wrap">'+tabs+
+      '<div class="card">'+
+      '<div class="card-title">&#128269; Search & Fix Pieces</div>'+
+      '<p style="font-size:12px;color:#4a6080;margin-bottom:12px">Search by Batch No., Heat No., or Strand to find and remove incorrectly submitted pieces.</p>'+
+      '<input class="search-box" id="searchInput" placeholder="&#128269; Type Batch No., Heat No., or Strand..." value="'+searchQuery+'"/>'+
+      (q.length>2&&results.length===0?
+        '<div style="text-align:center;padding:24px;color:#4a6080;font-size:13px;margin-top:10px">&#128269; No results found for <strong>"'+searchQuery+'"</strong></div>':
+        results.length>0?
+          '<div style="margin-top:12px">'+
+          '<p style="font-size:11px;color:#4a6080;margin-bottom:8px;font-weight:600">Found '+results.length+' result(s):</p>'+
+          results.map(function(res){
+            var s=res.session;
+            var r=res.row;
+            return '<div class="search-result">'+
+              '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">'+
+              '<div>'+
+              '<p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">Batch: <span style="color:#3b82f6">'+r.batchNo+'</span></p>'+
+              '<p style="font-size:11px;color:#4a6080;margin:3px 0">Heat: '+r.heatNo+' | Strand: '+r.strand+' | Grade: '+r.grade+' | Length: '+r.length+'</p>'+
+              '<p style="font-size:11px;color:#4a6080;margin:0">&#128119; '+(s.workerName||"--")+' | &#128197; '+(s.header&&s.header.date?s.header.date:"")+' | &#9201; '+(s.header&&s.header.startTime?s.header.startTime:"--")+'</p>'+
+              '<p style="font-size:11px;color:#059669;margin:2px 0">Sheet: '+(s.header&&s.header.sheetNo?s.header.sheetNo:"--")+' | '+(s.rows?s.rows.length:0)+' piece(s) in this request</p>'+
+              '</div>'+
+              '<button style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap" data-removebatch="'+r.batchNo+'" data-sessionid="'+s.id+'">&#128465; Remove Piece</button>'+
+              '</div>'+
+              '</div>';
+          }).join('')+
+          '</div>':
+        q.length>0&&q.length<=2?'<p style="font-size:12px;color:#9ab;margin-top:8px;text-align:center">Type at least 3 characters to search...</p>':''
+      )+
+      '</div></div>';
+  }
+
+  if(S.supTab==="stock"){
+    var stockCount=Object.keys(stockData).length;
+    var resEntries=Object.entries(reservedBatches);
+    return topbarS()+'<div class="wrap">'+tabs+
+      '<div class="card">'+
+      '<div class="card-title">&#128196; Stock Inventory</div>'+
+      '<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:14px;margin-bottom:16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">'+
+      '<div>'+(stockCount>0?'<p style="font-size:13px;font-weight:700;color:#059669;margin:0">&#9989; '+stockCount+' pieces loaded</p><p style="font-size:11px;color:#4a6080;margin:4px 0 0">Last updated: '+(stockLastUpdate||"--")+'</p>':'<p style="font-size:13px;font-weight:700;color:#d97706;margin:0">&#9888; No stock file uploaded yet</p>')+'</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:inline-block">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label>'+
+      (stockCount>0?'<button id="btnClearStock" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:10px 16px;color:#dc2626;font-weight:700;font-size:13px;cursor:pointer">&#128465; Clear Stock</button>':'')+
+      '</div></div></div>'+
+      '<div class="card-title">&#128275; List Mode</div>'+
+      '<div style="display:flex;gap:10px;margin-bottom:12px">'+
+      '<button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button>'+
+      '<button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button>'+
+      '</div>'+
+      '<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.1);border-radius:10px;padding:12px;font-size:12px;color:#4a6080;margin-bottom:16px">'+
+      '<p style="margin:0 0 4px"><strong style="color:#1e3a8a">&#128275; Open List:</strong> Workers enter all details manually</p>'+
+      '<p style="margin:0"><strong style="color:#059669">&#128274; Closed List:</strong> Heat No. + Strand only — details auto-fill from SAP stock</p>'+
+      '</div>'+
+      (resEntries.length>0?
+        '<div class="card-title">&#128274; Active Reservations ('+resEntries.length+')</div>'+
+        '<div style="background:rgba(139,92,246,0.04);border:1px solid rgba(139,92,246,0.15);border-radius:10px;padding:12px;margin-bottom:8px">'+
+        resEntries.map(function(e){
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(139,92,246,0.1)">'+
+            '<p style="font-size:12px;color:#7c3aed;margin:0;font-weight:600">&#128274; <strong>'+e[0]+'</strong> — '+e[1].workerName+'</p>'+
+            '<button style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:6px;padding:4px 12px;color:#059669;font-size:11px;font-weight:700;cursor:pointer" data-release="'+e[0]+'">&#128275; Release</button>'+
+            '</div>';
+        }).join('')+
+        '</div>':'')+
+      '</div></div>';
+  }
+
+  var stats='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">'+
+    '<div class="sc"><div style="font-size:22px">&#128203;</div><div style="font-size:22px;font-weight:800;color:#1e3a8a">'+S.sessions.length+'</div><div style="font-size:11px;color:#4a6080">Total Requests</div></div>'+
+    '<div class="sc"><div style="font-size:22px">&#128296;</div><div style="font-size:22px;font-weight:800;color:#1e3a8a">'+tp+'</div><div style="font-size:11px;color:#4a6080">Total Pieces</div></div></div>';
+  if(S.loading) return topbarS()+'<div class="wrap">'+tabs+stats+'<div class="ebox"><div style="font-size:36px">&#9203;</div><p style="color:#4a6080;margin-top:12px">Loading...</p></div></div>';
+  if(!S.sessions.length) return topbarS()+'<div class="wrap">'+tabs+stats+'<div class="ebox"><div style="font-size:46px">&#128237;</div><p style="color:#4a6080;margin-top:12px">No requests yet</p></div></div>';
+  var sh=S.sessions.map(function(s){
+    var dc=S.delC===s.id?'<div class="dc"><span style="font-size:13px;color:#dc2626;font-weight:600">Delete this request permanently?</span><div style="display:flex;gap:8px"><button class="bd" style="padding:7px 14px" data-dc="'+s.id+'">Yes, Delete</button><button class="bs" style="padding:7px 14px" id="btnDC">Cancel</button></div></div>':"";
+    var rows=(s.rows||[]).map(function(r,i){
+      return '<tr><td>'+(i+1)+'</td><td style="font-weight:700;color:#1e3a8a">'+(r.batchNo||"")+'</td><td>'+(r.heatNo||"")+'</td><td>'+(r.strand||"")+'</td><td>'+(r.rollingSize||"")+'</td><td>'+(r.materialType||"")+'</td><td>'+(r.grade||"")+'</td><td>'+(r.length||"")+'</td><td>'+(r.quantity||"")+'</td><td>'+(r.locationFrom||"")+'</td><td>'+(r.locationTo||"")+'</td><td>'+(r.remarks||"")+'</td></tr>';
+    }).join("");
+    return '<div class="card" style="margin-bottom:16px">'+dc+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
+      '<div><span class="badge">Sheet: '+(s.header&&s.header.sheetNo?s.header.sheetNo:"--")+'</span>'+
+      '<span class="badge">'+(s.rows?s.rows.length:0)+' piece(s)</span>'+
+      '<span style="font-size:11px;color:#4a6080">'+(s.timestamp||"")+'</span>'+
+      '<div style="margin-top:5px;font-size:12px;color:#4a6080">&#128119; '+(s.workerName||"--")+' (ID: '+(s.workerId||"--")+') | &#128197; '+(s.header&&s.header.date?s.header.date:"")+' | &#9201; '+(s.header&&s.header.startTime?s.header.startTime:"--")+' - '+(s.header&&s.header.endTime?s.header.endTime:"--")+(s.timeTaken?' | &#128336; '+s.timeTaken:"")+'</div></div>'+
+      '<div style="display:flex;gap:8px"><button class="bx" data-ex="'+s.id+'">&#11015; Excel</button><button class="bd" data-da="'+s.id+'">&#128465;</button></div></div>'+
+      '<div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>#</th><th>Batch No.</th><th>Heat No.</th><th>Strand</th><th>Rolling Size</th><th>Material Type</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  }).join("");
+  return topbarS()+'<div class="wrap">'+tabs+stats+sh+'</div>';
+}
+
+
+function bind(){
+  var bl=document.getElementById("btnLogin");
+  if(bl) bl.onclick=function(){
+    var u=document.getElementById("iu").value.trim();
+    var p=document.getElementById("ip").value;
+    var c=CREDS[u];
+    if(c&&c.pw===p){
+      if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}
+      else if(c.role==="supervisor"){loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}
+      else if(c.role==="admin"){loadRemarks();loadDynamicWorkers();loadDynamicSupervisors();listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}
+    } else document.getElementById("le").style.display="block";
+  };
+  var tp=document.getElementById("tp");
+  if(tp) tp.onclick=function(){var i=document.getElementById("ip");i.type=i.type==="password"?"text":"password";};
+  // Supervisor ID confirm
+  var bsid=document.getElementById("btnSid");
+  if(bsid) bsid.onclick=async function(){
+    var sid=document.getElementById("sid").value.trim().toUpperCase();
+    var sname=dynamicSupervisors[sid];
+    if(!sname){ss({supervisorIdErr:"ID not found. Please try again."});return;}
+    ss({supervisorStep:false,supervisorId:sid,supervisorName:sname,supervisorIdErr:"",submitted:false,supTab:"requests"});
+    load();loadStockFromDB();listenReservations();
+    registerPresence(sname+' ('+sid+')','Supervisor');
+  };
+
+  var bwid=document.getElementById("btnWid");
+  if(bwid) bwid.onclick=async function(){
+    var id=document.getElementById("wid").value.trim().padStart(3,"0");
+    var name=WORKERS[id];
+    if(!name){ss({workerIdErr:"ID not found."});return;}
+    await loadAllBatchNos();await loadStockFromDB();await loadListMode();
+    listenReservations();startTime=null;
+    registerPresence(name+' ('+id+')','Worker');ss({workerStep:false,workerId:id,workerName:name,workerIdErr:"",submitted:false,rows:[er()],
+      hdr:{sheetNo:"",date:fmtDate(new Date()),operator:name,startTime:"",endTime:""}});
+  };
+  var bo=document.getElementById("btnOut");
+  if(bo) bo.onclick=async function(){
+    await removePresence();
+    if(unsubPresence){unsubPresence();unsubPresence=null;}
+    if(unsub)unsub();if(unsubReservations)unsubReservations();
+    showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];columnMapping=null;
+    ss({role:null,uname:"",submitted:false,sessions:[],workerStep:false,workerId:"",workerName:"",supervisorStep:false,supervisorId:"",supervisorName:""});
+  };
+  var blogout=document.getElementById("btnLogout");
+  if(blogout) blogout.onclick=async function(){await removePresence();
+    await releaseMyReservations();
+    if(unsub)unsub();if(unsubReservations)unsubReservations();
+    ss({role:null,uname:"",submitted:false,workerStep:false,workerId:"",workerName:"",rows:[er()],logoutMsg:true});
+    setTimeout(function(){ss({logoutMsg:false});},4000);
+  };
+  var bback=document.getElementById("btnBackLogin");
+  if(bback) bback.onclick=function(){ss({logoutMsg:false});};
+  var bn=document.getElementById("btnNew");
+  if(bn) bn.onclick=async function(){
+    await releaseMyReservations();startTime=null;
+    await loadAllBatchNos();await loadStockFromDB();
+    ss({submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:"",endTime:""}});
+  };
+  var ba=document.getElementById("btnAdd");
+  if(ba) ba.onclick=function(){ss({rows:S.rows.concat([er()])});};
+  var tabReq=document.getElementById("tabReq");
+  if(tabReq) tabReq.onclick=function(){ss({supTab:"requests"});};
+  var tabStock=document.getElementById("tabStock");
+  if(tabStock) tabStock.onclick=function(){ss({supTab:"stock"});};
+  var tabSearch=document.getElementById("tabSearch");
+  if(tabSearch) tabSearch.onclick=function(){searchQuery="";ss({supTab:"search"});};
+
+  // Search input — live search without losing focus
+  var si=document.getElementById("searchInput");
+  if(si){
+    si.addEventListener("input",function(e){
+      searchQuery=e.target.value;
+      var q=searchQuery.trim().toLowerCase();
+      var resultsDiv=document.querySelector(".wrap .card div[style*='margin-top:12px']");
+      // Rebuild only results area
+      document.getElementById("app").innerHTML=html();
+      bind();
+      var newSi=document.getElementById("searchInput");
+      if(newSi){newSi.focus();try{newSi.setSelectionRange(searchQuery.length,searchQuery.length);}catch(ex){}}
+    });
+  }
+
+  var bmo=document.getElementById("btnModeOpen");
+  if(bmo) bmo.onclick=async function(){listMode="open";try{await db.collection("settings").doc("listMode").set({mode:"open"});}catch(e){}draw();};
+  var bmc=document.getElementById("btnModeClosed");
+  if(bmc) bmc.onclick=async function(){listMode="closed";try{await db.collection("settings").doc("listMode").set({mode:"closed"});}catch(e){}draw();};
+
+  var bcs=document.getElementById("btnClearStock");
+  if(bcs) bcs.onclick=async function(){
+    if(!confirm("Clear all stock data?"))return;
+    try{
+      var snap=await db.collection("stock").get();var CHUNK=500;
+      for(var ci=0;ci<snap.docs.length;ci+=CHUNK){
+        var cb=db.batch();snap.docs.slice(ci,ci+CHUNK).forEach(function(d){cb.delete(d.ref);});await cb.commit();
+      }
+      await db.collection("settings").doc("stockMeta").delete();
+      stockData={};stockLastUpdate="";draw();
+    }catch(e){alert("Error clearing stock.");}
+  };
+
+  var sf=document.getElementById("stockFile");
+  if(sf) sf.onchange=function(e){
+    var file=e.target.files[0];if(!file)return;
+    var reader=new FileReader();
+    reader.onload=async function(ev){
+      try{
+        var wb=XLSX.read(ev.target.result,{type:"binary"});
+        var ws=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(ws);
+        if(!rows.length){alert("File is empty.");return;}
+        var cols=Object.keys(rows[0]);
+        pendingFileColumns=cols;pendingUploadRows=rows;
+        await loadColumnMapping();
+        if(columnMapping&&columnMapping.batchNo&&columnMapping.heatNo){
+          var stillValid=columnMapping.batchNo&&cols.includes(columnMapping.batchNo)&&cols.includes(columnMapping.heatNo);
+          if(stillValid){await processUpload(rows,columnMapping);return;}
+        }
+        columnMapping=autoDetectColumns(cols);
+        showMappingScreen=true;draw();
+      }catch(err){alert("Error reading file: "+err.message);}
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  // Column mapping confirm
+  var btnCM=document.getElementById("btnConfirmMapping");
+  if(btnCM) btnCM.onclick=async function(){
+    var nm={};
+    document.querySelectorAll("[data-mapkey]").forEach(function(sel){nm[sel.dataset.mapkey]=sel.value;});
+    if(!nm.batchNo){alert("Please select the Batch No. column.");return;}
+    if(!nm.heatNo){alert("Please select the Heat No. column.");return;}
+    columnMapping=nm;
+    await processUpload(pendingUploadRows,nm);
+  };
+  var btnCancelM=document.getElementById("btnCancelMapping");
+  if(btnCancelM) btnCancelM.onclick=function(){showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];draw();};
+
+  // Admin handlers
+  var btnAR=document.getElementById("btnAddRemark");
+  if(btnAR) btnAR.onclick=async function(){
+    var val=document.getElementById("newRemark").value.trim();
+    if(!val)return;
+    if(remarksOptions.includes(val)){alert("Already exists.");return;}
+    remarksOptions.push(val);
+    await db.collection("settings").doc("remarks").set({options:remarksOptions});
+    draw();
+  };
+  document.querySelectorAll("[data-del-remark]").forEach(function(btn){
+    btn.onclick=async function(){
+      var i=parseInt(btn.getAttribute("data-del-remark"));
+      if(!confirm("Delete: "+remarksOptions[i]+"?"))return;
+      remarksOptions.splice(i,1);
+      await db.collection("settings").doc("remarks").set({options:remarksOptions});draw();
+    };
+  });
+  var btnAW=document.getElementById("btnAddWorker");
+  if(btnAW) btnAW.onclick=async function(){
+    var wid2=document.getElementById("newWid").value.trim();
+    var wn=document.getElementById("newWname").value.trim();
+    if(!wid2||!wn){alert("Enter both ID and Name.");return;}
+    var dw2=Object.assign({},(S.dynamicWorkers||WORKERS));
+    dw2[wid2]=wn;
+    await db.collection("settings").doc("workers").set({workers:dw2});
+    ss({dynamicWorkers:dw2});
+  };
+  document.querySelectorAll("[data-del-worker]").forEach(function(btn){
+    btn.onclick=async function(){
+      var wid3=btn.getAttribute("data-del-worker");
+      if(!confirm("Delete worker "+wid3+"?"))return;
+      var dw3=Object.assign({},(S.dynamicWorkers||WORKERS));
+      delete dw3[wid3];
+      await db.collection("settings").doc("workers").set({workers:dw3});
+      ss({dynamicWorkers:dw3});
+    };
+  });
+  var btnAS=document.getElementById("btnAddSup");
+  if(btnAS) btnAS.onclick=async function(){
+    var sid2=document.getElementById("newSid").value.trim().toUpperCase();
+    var sn=document.getElementById("newSname").value.trim();
+    if(!sid2||!sn){alert("Enter both ID and Name.");return;}
+    dynamicSupervisors[sid2]=sn;
+    await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
+    draw();
+  };
+  document.querySelectorAll("[data-del-sup]").forEach(function(btn){
+    btn.onclick=async function(){
+      var sid3=btn.getAttribute("data-del-sup");
+      if(!confirm("Delete supervisor "+sid3+"?"))return;
+      delete dynamicSupervisors[sid3];
+      await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
+      draw();
+    };
+  });
+  ["Worker","Supervisor","Admin"].forEach(function(r){
+    var btn=document.getElementById("btnSavePw"+r);
+    if(btn) btn.onclick=async function(){
+      var val=document.getElementById("pw"+r).value.trim();
+      if(!val){alert("Password cannot be empty.");return;}
+      try{await db.collection("settings").doc("passwords").set({[r.toLowerCase()]:val},{merge:true});
+        alert("Password updated for "+r);}catch(e){alert("Error: "+e.message);}
+    };
+  });
+
+  document.querySelectorAll("[data-release]").forEach(function(b){
+    b.onclick=async function(e){
+      var batch=e.target.dataset.release;
+      if(!confirm("Release reservation for: "+batch+"?"))return;
+      try{await db.collection("reservations").doc(batch).delete();draw();}catch(ex){alert("Error releasing.");}
+    };
+  });
+
+  // Remove single piece from a session
+  document.querySelectorAll("[data-removebatch]").forEach(function(b){
+    b.onclick=async function(e){
+      var batchToRemove=e.target.dataset.removebatch;
+      var sessionId=e.target.dataset.sessionid;
+      if(!confirm("Remove piece "+batchToRemove+" from this request?\nThis will allow other workers to use this piece."))return;
+      try{
+        var session=S.sessions.find(function(s){return s.id===sessionId;});
+        if(!session)return;
+        var newRows=(session.rows||[]).filter(function(r){return r.batchNo!==batchToRemove;});
+        await db.collection("deliveryNotes").doc(sessionId).update({rows:newRows});
+        allBatchNos.delete(batchToRemove);
+        searchQuery="";
+        alert("Piece "+batchToRemove+" removed successfully. Workers can now use it.");
+        draw();
+      }catch(ex){alert("Error removing piece: "+ex.message);}
+    };
+  });
+
+  document.querySelectorAll(".ri").forEach(function(inp){
+    inp.addEventListener("input",function(e){
+      var i=parseInt(e.target.dataset.r);
+      var f=e.target.dataset.f;
+      S.rows[i][f]=e.target.value;
+      if(f==="heatNo"||f==="strand"){
+        var batch=(S.rows[i].heatNo||"")+(S.rows[i].strand||"");
+        S.rows[i].batchNo=batch;
+        S.rows[i].autoFilled=false;S.rows[i].notFound=false;
+        S.rows[i].alreadySubmitted=false;S.rows[i].reserved=false;S.rows[i].reservedBy="";
+        var dupInRequest=batch&&S.rows.filter(function(r,x){return x!==i&&((r.heatNo||"")+(r.strand||""))===batch;}).length>0;
+        if(dupInRequest){S.rows[i][f]="";S.rows[i].batchNo=(S.rows[i].heatNo||"")+(S.rows[i].strand||"");alert("This piece already exists in this request!");return;}
+        if(batch.length>5){
+          if(allBatchNos.has(batch)) S.rows[i].alreadySubmitted=true;
+          if(reservedBatches[batch]&&reservedBatches[batch].workerId!==S.workerId){S.rows[i].reserved=true;S.rows[i].reservedBy=reservedBatches[batch].workerName;}
+          else if(!allBatchNos.has(batch)) reserveBatch(batch);
+          if(listMode==="closed"){
+            if(stockData[batch]){var item=stockData[batch];S.rows[i].grade=item.grade||"";S.rows[i].length=String(item.length||"");S.rows[i].materialType=item.materialType||"";S.rows[i].locationFrom=item.storageLocation||"";S.rows[i].autoFilled=true;S.rows[i].notFound=false;}
+            else{S.rows[i].autoFilled=false;S.rows[i].notFound=true;}
+          }
+        }
+      }
+      if(!startTime&&e.target.value.trim()){startTime=new Date();S.hdr.startTime=fmtTime(startTime);}
+      if(f==="heatNo"||f==="strand") draw();
+    });
+  });
+
+  document.querySelectorAll("[data-ri]").forEach(function(b){
+    b.onclick=async function(e){
+      var i=parseInt(e.target.dataset.ri);
+      var batch=S.rows[i].batchNo;
+      if(batch&&myReservations.includes(batch)){try{await db.collection("reservations").doc(batch).delete();}catch(ex){}myReservations=myReservations.filter(function(r){return r!==batch;});}
+      ss({rows:S.rows.filter(function(_,x){return x!==i;})});
+    };
+  });
+  document.querySelectorAll("[data-cp]").forEach(function(b){
+    b.onclick=function(e){
+      var i=parseInt(e.target.dataset.cp);
+      var nr=Object.assign({},S.rows[i]);
+      nr.strand="";nr.batchNo="";nr.remarks="";nr.autoFilled=false;nr.notFound=false;nr.alreadySubmitted=false;nr.reserved=false;nr.reservedBy="";
+      ss({rows:S.rows.concat([nr])});
+    };
+  });
+  document.querySelectorAll("[data-cl]").forEach(function(b){
+    b.onclick=async function(e){
+      var i=parseInt(e.target.dataset.cl);
+      var batch=S.rows[i].batchNo;
+      if(batch&&myReservations.includes(batch)){try{await db.collection("reservations").doc(batch).delete();}catch(ex){}myReservations=myReservations.filter(function(r){return r!==batch;});}
+      S.rows[i]=er();draw();
+    };
+  });
+
+  var hs=document.getElementById("hs");
+  if(hs) hs.addEventListener("input",function(e){S.hdr.sheetNo=e.target.value;});
+
+  var bsub=document.getElementById("btnSub");
+  if(bsub) bsub.onclick=async function(){
+    var filled=S.rows.filter(function(r){return r.heatNo&&r.heatNo.trim();});
+    if(!filled.length){alert("Please enter at least one Heat No.");return;}
+    var reserved=filled.filter(function(r){return r.reserved;});
+    if(reserved.length){alert("Reserved by others:\n"+reserved.map(function(r){return r.batchNo+" — "+r.reservedBy;}).join("\n"));return;}
+    var already=filled.filter(function(r){return r.alreadySubmitted;});
+    if(already.length){alert("Already submitted:\n"+already.map(function(r){return r.batchNo;}).join("\n"));return;}
+    var notFound=filled.filter(function(r){return r.notFound;});
+    if(notFound.length&&listMode==="closed"){alert("Not in stock:\n"+notFound.map(function(r){return r.batchNo;}).join("\n"));return;}
+    var endT=new Date();var endStr=fmtTime(endT);var taken=startTime?timeDiff(startTime,endT):"N/A";
+    ss({saving:true});
+    try{
+      var rs=filled.map(function(r){var obj=Object.assign({},r);delete obj.autoFilled;delete obj.notFound;delete obj.alreadySubmitted;delete obj.reserved;delete obj.reservedBy;obj.batchNo=(r.heatNo||"")+(r.strand||"");return obj;});
+      await db.collection("deliveryNotes").add({header:Object.assign({},S.hdr,{endTime:endStr}),rows:rs,submittedBy:S.uname,workerName:S.workerName,workerId:S.workerId,timeTaken:taken,listMode:listMode,createdAt:firebase.firestore.FieldValue.serverTimestamp(),timestamp:new Date().toLocaleString("en-GB")});
+      rs.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});
+      await releaseMyReservations();
+      ss({submitted:true,saving:false,timeTaken:taken});
+    }catch(e){alert("Error saving.");ss({saving:false});}
+  };
+
+  document.querySelectorAll("[data-ex]").forEach(function(b){
+    b.onclick=function(e){var s=S.sessions.find(function(x){return x.id===e.target.dataset.ex;});if(s)xlExport(s);};
+  });
+  document.querySelectorAll("[data-da]").forEach(function(b){
+    b.onclick=function(e){ss({delC:e.target.dataset.da});};
+  });
+  document.querySelectorAll("[data-dc]").forEach(function(b){
+    b.onclick=async function(e){try{await db.collection("deliveryNotes").doc(e.target.dataset.dc).delete();ss({delC:null});}catch(e){alert("Error.");}};
+  });
+  var bdc=document.getElementById("btnDC");
+  if(bdc) bdc.onclick=function(){ss({delC:null});};
+}
+
+function load(){
+  ss({loading:true});
+  unsub=db.collection("deliveryNotes").orderBy("createdAt","desc").onSnapshot(function(snap){
+    ss({sessions:snap.docs.map(function(d){return Object.assign({id:d.id},d.data());}),loading:false});
+  });
+}
+
+function xlExport(s){
+  var wb=XLSX.utils.book_new();
+  var workerName=(s.workerName||"Worker").replace(/\s+/g,"_");
+  var sheetNo=s.header&&s.header.sheetNo?s.header.sheetNo:"";
+  var dateStr=s.header&&s.header.date?s.header.date.replace(/-/g,""):"";
+  var fileName="DeliveryNote_"+workerName+(sheetNo?""+sheetNo:"")+(dateStr?""+dateStr:"")+".xlsx";
+  var ws=XLSX.utils.aoa_to_sheet([
+    ["DELIVERY NOTE - SULB Company | MS Logistics"],[],
+    ["Sheet No.",sheetNo,"","Date:",s.header?s.header.date:""],
+    ["Operator:",s.workerName||"","","ID:",s.workerId||""],
+    ["Start Time:",s.header?s.header.startTime:"","","End Time:",s.header?s.header.endTime:""],
+    ["Time Taken:",s.timeTaken||""],
+    [],
+    ["Sr.","Batch No.","Heat No.","Strand","Rolling Size","Material Type","Rolling Lot","Grade","Length","Qty (MT)","From","To","Remarks"],
+    ...(s.rows||[]).map(function(r,i){return [i+1,r.batchNo,r.heatNo,r.strand,r.rollingSize,r.materialType,r.rollingLot,r.grade,r.length,r.quantity,r.locationFrom,r.locationTo,r.remarks];})
+  ]);
+  ws["!cols"]=[5,14,12,10,18,14,16,10,8,10,10,10,16].map(function(w){return {wch:w};});
+  XLSX.utils.book_append_sheet(wb,ws,"Delivery Note");
+  XLSX.writeFile(wb,fileName);
+}
+
+// ── Async loaders ──────────────────────────────────────────
+async function loadRemarks(){
+  try{var doc=await db.collection("settings").doc("remarks").get();
+    remarksOptions=doc.exists?(doc.data().options||remarksOptions):remarksOptions;
+  }catch(e){}
+}
+
+async function loadColumnMapping(){
+  try{var doc=await db.collection("settings").doc("columnMapping").get();
+    if(doc.exists)columnMapping=doc.data().mapping||null;
+  }catch(e){}
+}
+
+async function loadDynamicWorkers(){
+  try{var doc=await db.collection("settings").doc("workers").get();
+    if(doc.exists)ss({dynamicWorkers:doc.data().workers||{}});
+  }catch(e){}
+}
+
+async function loadDynamicSupervisors(){
+  try{var doc=await db.collection("settings").doc("supervisors").get();
+    if(doc.exists)dynamicSupervisors=doc.data().supervisors||SUPERVISORS;
+    else dynamicSupervisors=Object.assign({},SUPERVISORS);
+  }catch(e){dynamicSupervisors=Object.assign({},SUPERVISORS);}
+}
+
+// ── Presence ───────────────────────────────────────────────
+async function registerPresence(name,role){
+  try{
+    presenceId=presenceId||(Date.now().toString(36)+Math.random().toString(36).slice(2));
+    await db.collection("presence").doc(presenceId).set({
+      name:name,role:role,
+      loginTime:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}),
+      lastSeen:Date.now(),
+      lastSeenFmt:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})
+    });
+    if(presenceInterval)clearInterval(presenceInterval);
+    presenceInterval=setInterval(async function(){
+      try{await db.collection("presence").doc(presenceId).update({
+        lastSeen:Date.now(),
+        lastSeenFmt:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})
+      });}catch(e){}
+    },30000);
+  }catch(e){}
+}
+
+async function removePresence(){
+  if(presenceInterval){clearInterval(presenceInterval);presenceInterval=null;}
+  if(!presenceId)return;
+  try{await db.collection("presence").doc(presenceId).delete();presenceId=null;}catch(e){}
+}
+
+let unsubPresence=null;
+function listenPresence(){
+  if(unsubPresence)unsubPresence();
+  unsubPresence=db.collection("presence").onSnapshot(function(snap){
+    var users=[];var now=Date.now();
+    snap.docs.forEach(function(d){
+      var data=d.data();
+      if(data.lastSeen&&(now-data.lastSeen)<120000)users.push(data);
+    });
+    users.sort(function(a,b){return b.lastSeen-a.lastSeen;});
+    ss({onlineUsers:users});
+  });
+}
+
+// ── Stock upload ───────────────────────────────────────────
+async function processUpload(rows,mapping){
+  try{
+    var items={};
+    rows.forEach(function(row){
+      var bk=String(row[mapping.batchNo]||"").trim();
+      var heat=String(row[mapping.heatNo]||"").trim();
+      var strand=bk&&heat?bk.replace(heat,""):"";
+      if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,
+        grade:String(mapping.grade?row[mapping.grade]||"":""),
+        length:String(mapping.length?row[mapping.length]||"":""),
+        materialType:String(mapping.materialType?row[mapping.materialType]||"":""),
+        availableStock:parseFloat(mapping.availableStock?(row[mapping.availableStock]||0):0),
+        storageLocation:String(mapping.storageLocation?row[mapping.storageLocation]||"":""),
+        storageBin:String(mapping.storageBin?row[mapping.storageBin]||"":"")};
+    });
+    var updatedAt=new Date().toLocaleString("en-GB");
+    var keys=Object.keys(items);var CHUNK=500;
+    // Delete old
+    var oldSnap=await db.collection("stock").get();
+    for(var i=0;i<oldSnap.docs.length;i+=CHUNK){
+      var db1=db.batch();
+      oldSnap.docs.slice(i,i+CHUNK).forEach(function(d){db1.delete(d.ref);});
+      await db1.commit();
+    }
+    // Write new
+    for(var j=0;j<keys.length;j+=CHUNK){
+      var db2=db.batch();
+      keys.slice(j,j+CHUNK).forEach(function(k){
+        db2.set(db.collection("stock").doc(k.replace(/[/]/g,"_")),items[k]);
+      });
+      await db2.commit();
+    }
+    await db.collection("settings").doc("stockMeta").set({updatedAt:updatedAt});
+    await db.collection("settings").doc("columnMapping").set({mapping:mapping,savedAt:updatedAt});
+    stockData=items;stockLastUpdate=updatedAt;
+    showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];
+    alert("Stock uploaded! "+keys.length+" pieces loaded.");draw();
+  }catch(err){alert("Error saving stock: "+err.message);}
+}
+
+// ── HTML screens ───────────────────────────────────────────
+function supervisorIdHTML(){
+  return topbarLogin()+
+    '<div class="wrap" style="max-width:420px">'+
+    '<div style="text-align:center;margin:32px 0 24px">'+
+      '<div style="font-size:52px;margin-bottom:10px">&#128203;</div>'+
+      '<h2 style="color:#1e3a8a;margin:0 0 6px">Supervisor ID</h2>'+
+      '<p style="color:#4a6080;font-size:13px">Enter your supervisor ID</p>'+
+    '</div>'+
+    '<div class="card">'+
+      '<label class="lbl">Supervisor ID</label>'+
+      '<input id="sid" placeholder="e.g. S01" style="font-size:24px;text-align:center;letter-spacing:8px;padding:14px"/>'+
+      (S.supervisorIdErr?'<p style="color:#dc2626;font-size:12px;margin-top:8px;text-align:center">'+S.supervisorIdErr+'</p>':'')+
+      '<button class="bp" id="btnSid" style="margin-top:14px">Confirm</button>'+
+    '</div></div>';
+}
+
+function mappingScreenHTML(){
+  var cols=pendingFileColumns;
+  var rows=FIELD_DEFS.map(function(fd){
+    var det=columnMapping&&columnMapping[fd.key]?columnMapping[fd.key]:"";
+    var status=det?'<span style="color:#059669;font-weight:700">&#10003; Detected</span>':'<span style="color:#d97706;font-weight:700">&#9888; Not found</span>';
+    var opts=cols.map(function(c){return '<option value="'+c+'"'+(c===det?' selected':'')+'>'+c+'</option>';}).join('');
+    return '<tr><td style="padding:10px 8px;font-weight:700;color:#1e3a8a;font-size:13px">'+fd.label+'</td>'+
+      '<td style="padding:10px 8px"><select data-mapkey="'+fd.key+'" style="width:100%;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:8px;color:#1e3a8a;font-size:13px"><option value="">-- Select --</option>'+opts+'</select></td>'+
+      '<td style="padding:10px 8px">'+status+'</td></tr>';
+  }).join('');
+  return topbarS()+
+    '<div class="wrap"><div class="card">'+
+    '<div class="card-title">&#128196; Column Mapping</div>'+
+    '<p style="font-size:13px;color:#4a6080;margin-bottom:16px">Review detected columns then click Confirm.</p>'+
+    '<div style="overflow-x:auto"><table><thead><tr><th>Field</th><th>Column in File</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div style="display:flex;gap:10px;margin-top:18px">'+
+      '<button class="bp" id="btnConfirmMapping" style="flex:2">&#10003; Confirm & Upload</button>'+
+      '<button class="bs" id="btnCancelMapping" style="flex:1">&#10006; Cancel</button>'+
+    '</div></div></div>';
+}
+
+function adminHTML(){
+  var tab=S.adminTab||"online";
+  var tabDefs=[
+    {key:"online",label:"🟢 Online"},
+    {key:"remarks",label:"📝 Remarks"},
+    {key:"workers",label:"👷 Workers"},
+    {key:"supervisors",label:"📋 Supervisors"},
+    {key:"settings",label:"⚙️ Settings"}
+  ];
+  var tabs='<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">'+
+    tabDefs.map(function(t){
+      var active=tab===t.key;
+      return '<button onclick="ss({adminTab:\'' +t.key+ '\'})" style="flex:1;min-width:80px;padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:'+(active?'#1e3a8a':'rgba(30,58,138,0.08)')+';color:'+(active?'#fff':'#1e3a8a')+'">'+t.label+'</button>';
+    }).join('')+'</div>';
+
+  var body='';
+
+  if(tab==="online"){
+    var users=S.onlineUsers||[];var now=Date.now();
+    var cards=users.length===0?'<div style="text-align:center;padding:30px;color:#4a6080">🔴 No users online</div>':
+      users.map(function(u){
+        var age=Math.floor((now-u.lastSeen)/1000);
+        var ageStr=age<60?age+"s ago":Math.floor(age/60)+"m ago";
+        var isW=u.role==="Worker";
+        return '<div style="display:flex;align-items:center;gap:12px;padding:14px;background:#fff;border-radius:10px;border:1px solid rgba(30,58,138,0.12);margin-bottom:10px">'+
+          '<div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></div>'+
+          '<div style="flex:1"><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:14px">'+u.name+'</p>'+
+          '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Login: '+u.loginTime+' | Last seen: '+u.lastSeenFmt+' ('+ageStr+')</p></div>'+
+          '<span style="background:'+(isW?'rgba(5,150,105,0.1)':'rgba(37,99,235,0.1)')+';color:'+(isW?'#059669':'#2563eb')+';border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700">'+u.role+'</span>'+
+        '</div>';
+      }).join('');
+    body='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="card-title" style="margin:0">🟢 Online Users</div><span style="background:rgba(16,185,129,0.15);color:#059669;border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700">'+users.length+' online</span></div>'+cards+'</div>';
+  }
+
+  if(tab==="remarks"){
+    var ritems=remarksOptions.map(function(opt,i){
+      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
+        '<span style="flex:1;color:#1e3a8a;font-weight:600">'+opt+'</span>'+
+        '<button data-del-remark="'+i+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">✕</button>'+
+      '</div>';
+    }).join('');
+    body='<div class="card"><div class="card-title">📝 Remarks List</div>'+
+      '<div style="margin-bottom:16px"><input id="newRemark" placeholder="e.g. Transfer to Yard" style="margin-bottom:8px"/><button class="bp" id="btnAddRemark" style="width:100%;padding:12px">+ Add</button></div>'+
+      '<div style="max-height:400px;overflow-y:auto">'+(ritems||'<p style="color:#4a6080;text-align:center;padding:20px">No remarks yet.</p>')+'</div></div>';
+  }
+
+  if(tab==="workers"){
+    var dw=S.dynamicWorkers||WORKERS;
+    var wrows=Object.keys(dw).sort().map(function(id){
+      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
+        '<span style="background:#1e3a8a;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;min-width:40px;text-align:center">'+id+'</span>'+
+        '<span style="flex:1;color:#1e3a8a;font-weight:600">'+dw[id]+'</span>'+
+        '<button data-del-worker="'+id+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">✕</button>'+
+      '</div>';
+    }).join('');
+    body='<div class="card"><div class="card-title">👷 Workers</div>'+
+      '<div style="margin-bottom:16px"><div style="display:flex;gap:8px;margin-bottom:8px"><input id="newWid" placeholder="ID e.g. 018" maxlength="3" style="width:90px;text-align:center;font-weight:700"/><input id="newWname" placeholder="Worker Name" style="flex:1"/></div><button class="bp" id="btnAddWorker" style="width:100%;padding:12px">+ Add</button></div>'+
+      '<div style="max-height:400px;overflow-y:auto">'+wrows+'</div></div>';
+  }
+
+  if(tab==="supervisors"){
+    var srows2=Object.keys(dynamicSupervisors).sort().map(function(id){
+      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
+        '<span style="background:#2563eb;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;min-width:44px;text-align:center">'+id+'</span>'+
+        '<span style="flex:1;color:#1e3a8a;font-weight:600">'+dynamicSupervisors[id]+'</span>'+
+        '<button data-del-sup="'+id+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">✕</button>'+
+      '</div>';
+    }).join('');
+    body='<div class="card"><div class="card-title">📋 Supervisors</div>'+
+      '<div style="margin-bottom:16px"><div style="display:flex;gap:8px;margin-bottom:8px"><input id="newSid" placeholder="ID e.g. S03" style="width:90px;text-align:center;font-weight:700"/><input id="newSname" placeholder="Supervisor Name" style="flex:1"/></div><button class="bp" id="btnAddSup" style="width:100%;padding:12px">+ Add</button></div>'+
+      '<div style="max-height:400px;overflow-y:auto">'+srows2+'</div></div>';
+  }
+
+  if(tab==="settings"){
+    body='<div class="card"><div class="card-title">⚙️ Passwords</div>'+
+      ['Worker','Supervisor','Admin'].map(function(r){
+        return '<div style="margin-bottom:12px"><label class="lbl">'+r+' Password</label><div style="display:block"><input id="pw'+r+'" placeholder="Enter new password" type="password" style="flex:1;font-size:14px;padding:12px"/><button class="bp" id="btnSavePw'+r+'" style="width:100%;padding:12px;margin-top:8px">Save</button></div></div>';
+      }).join('')+'</div>';
+  }
+
+  return topbarS()+
+    '<div class="wrap">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+      '<div><p style="font-size:18px;font-weight:800;color:#1e3a8a;margin:0">Admin Panel</p><p style="font-size:12px;color:#4a6080;margin:0">System Administration</p></div>'+
+      '<button class="bs" id="btnOut" style="padding:8px 14px;font-size:12px">Sign Out</button>'+
+    '</div>'+tabs+body+'</div>';
+}
+
+function topbarLogin(){
+  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note System</p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company</p></div></div>';
+}
+
+draw();
+
+
+</script>
+</body>
+</html>
