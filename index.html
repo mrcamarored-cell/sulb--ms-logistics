@@ -197,6 +197,7 @@ function html(){
   if(S.role==="supervisor"&&S.supervisorStep)return supervisorIdHTML();
   if(S.role==="supervisor"&&showMappingScreen)return mappingScreenHTML();
   if(S.role==="supervisor")return supHTML();
+  if(S.role==="admin"&&showMappingScreen)return mappingScreenHTML();
   if(S.role==="admin")return adminHTML();
   return loginHTML();
 }
@@ -325,7 +326,7 @@ function supBody(){
     }).join(''):'<p style="color:#4a6080;font-size:13px;text-align:center;padding:10px">No active reservations</p>';
     body='<div class="card"><div class="card-title">&#128230; Upload SAP Stock File</div>'+
       '<div style="margin-bottom:8px"><span style="font-size:12px;color:#4a6080">Last updated: '+(stockLastUpdate||"Never")+'</span></div>'+
-      '<input type="file" id="stockFile" accept=".xlsx,.xls" style="margin-bottom:10px"/>'+
+      '<label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:block;text-align:center;margin-bottom:8px">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label>'+
       '<button class="bs" id="btnClearStock" style="width:100%;padding:10px;margin-top:4px;background:rgba(220,38,38,0.08);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Clear Stock</button>'+
       '<button class="bs" id="btnResetMapping" style="width:100%;padding:10px;margin-top:8px;background:rgba(245,158,11,0.08);color:#d97706;border:1px solid rgba(245,158,11,0.3)">&#128257; Reset Column Mapping</button>'+
       '</div>'+
