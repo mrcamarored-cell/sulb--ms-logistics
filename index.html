@@ -330,10 +330,9 @@ function supBody(){
       '<button class="bs" id="btnResetMapping" style="width:100%;padding:10px;margin-top:8px;background:rgba(245,158,11,0.08);color:#d97706;border:1px solid rgba(245,158,11,0.3)">&#128257; Reset Column Mapping</button>'+
       '</div>'+
       '<div class="card"><div class="card-title">&#9881; List Mode</div>'+
-      '<div style="display:flex;align-items:center;gap:12px;padding:10px 0">'+
-        '<span style="font-size:14px;color:#1e3a8a;font-weight:600">Current Mode:</span>'+
-        '<span style="background:'+modeBg+';color:'+modeColor+';border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700">'+(listMode==="closed"?"🔒 Closed List":"🔓 Open List")+'</span>'+
-        '<button id="btnToggleMode" class="bp" style="padding:8px 14px;font-size:12px;margin-left:auto">Toggle Mode</button>'+
+      '<div style="display:flex;gap:10px;margin-bottom:12px">'+
+      '<button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button>'+
+      '<button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button>'+
       '</div></div>'+
       '<div class="card"><div class="card-title">&#128274; Active Reservations</div>'+resHtml+'</div>';
   }
