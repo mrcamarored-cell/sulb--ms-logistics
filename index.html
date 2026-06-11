@@ -480,14 +480,16 @@ function supHTML(){
 
 function bind(){
   var bl=document.getElementById("btnLogin");
-  if(bl) bl.onclick=function(){
+  if(bl) bl.onclick=async function(){
     var u=document.getElementById("iu").value.trim();
     var p=document.getElementById("ip").value;
+    // Load latest passwords from Firebase before checking
+    await loadPasswords();
     var c=CREDS[u];
     if(c&&c.pw===p){
       if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}
-      else if(c.role==="supervisor"){loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}
-      else if(c.role==="admin"){Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]).then(function(){listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});});}
+      else if(c.role==="supervisor"){await loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}
+      else if(c.role==="admin"){await Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]);listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}
     } else document.getElementById("le").style.display="block";
   };
   var tp=document.getElementById("tp");
