@@ -496,6 +496,7 @@ function bind(){
   var bsid=document.getElementById("btnSid");
   if(bsid) bsid.onclick=async function(){
     var sid=document.getElementById("sid").value.trim().toUpperCase();
+    await loadDynamicSupervisors();
     var sname=dynamicSupervisors[sid];
     if(!sname){ss({supervisorIdErr:"ID not found. Please try again."});return;}
     ss({supervisorStep:false,supervisorId:sid,supervisorName:sname,supervisorIdErr:"",submitted:false,supTab:"requests"});
