@@ -487,7 +487,7 @@ function bind(){
     if(c&&c.pw===p){
       if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}
       else if(c.role==="supervisor"){loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}
-      else if(c.role==="admin"){loadRemarks();loadDynamicWorkers();loadDynamicSupervisors();listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}
+      else if(c.role==="admin"){Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]).then(function(){listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});});}
     } else document.getElementById("le").style.display="block";
   };
   var tp=document.getElementById("tp");
@@ -641,19 +641,24 @@ function bind(){
     var wid2=document.getElementById("newWid").value.trim();
     var wn=document.getElementById("newWname").value.trim();
     if(!wid2||!wn){alert("Enter both ID and Name.");return;}
-    var dw2=Object.assign({},(S.dynamicWorkers||WORKERS));
+    // Always reload from Firebase first to avoid overwriting
+    await loadDynamicWorkers();
+    var dw2=Object.assign({},S.dynamicWorkers);
     dw2[wid2]=wn;
     await db.collection("settings").doc("workers").set({workers:dw2});
-    ss({dynamicWorkers:dw2});
+    S.dynamicWorkers=dw2;
+    draw();
   };
   document.querySelectorAll("[data-del-worker]").forEach(function(btn){
     btn.onclick=async function(){
       var wid3=btn.getAttribute("data-del-worker");
       if(!confirm("Delete worker "+wid3+"?"))return;
-      var dw3=Object.assign({},(S.dynamicWorkers||WORKERS));
+      await loadDynamicWorkers();
+      var dw3=Object.assign({},S.dynamicWorkers);
       delete dw3[wid3];
       await db.collection("settings").doc("workers").set({workers:dw3});
-      ss({dynamicWorkers:dw3});
+      S.dynamicWorkers=dw3;
+      draw();
     };
   });
   var btnAS=document.getElementById("btnAddSup");
@@ -844,8 +849,9 @@ async function loadColumnMapping(){
 async function loadDynamicWorkers(){
   try{
     var doc=await db.collection("settings").doc("workers").get();
-    if(doc.exists&&doc.data().workers&&Object.keys(doc.data().workers).length>0){
-      S.dynamicWorkers=doc.data().workers;
+    if(doc.exists&&doc.data().workers){
+      // Merge Firebase workers with default WORKERS
+      S.dynamicWorkers=Object.assign({},WORKERS,doc.data().workers);
     } else {
       S.dynamicWorkers=Object.assign({},WORKERS);
     }
