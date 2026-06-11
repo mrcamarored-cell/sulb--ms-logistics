@@ -98,6 +98,7 @@ let showMappingScreen=false;
 const FIELD_DEFS=[
   {key:"batchNo",label:"Batch No.",keywords:["batch"]},
   {key:"heatNo",label:"Heat No.",keywords:["heat","ccm heat"]},
+  {key:"rollingSize",label:"Rolling Size",keywords:["rolling","size","rolling size"]},
   {key:"grade",label:"Grade",keywords:["grade","ccm grade"]},
   {key:"length",label:"Length",keywords:["length","ccm length"]},
   {key:"materialType",label:"Material Type",keywords:["product type","material","ccm product"]},
@@ -972,6 +973,7 @@ async function processUpload(rows,mapping){
         return String(row[col]||"");
       }
       if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,
+        rollingSize:getField("rollingSize",row,mapping),
         grade:getField("grade",row,mapping),
         length:getField("length",row,mapping),
         materialType:getField("materialType",row,mapping),
