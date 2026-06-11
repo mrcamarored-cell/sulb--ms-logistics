@@ -288,6 +288,85 @@ function workerHTML(){
 }
 
 
+function supBody(){
+  var tp=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);
+  var tab=S.supTab||"requests";
+  var body="";
+  if(tab==="requests"){
+    if(S.loading)body='<div class="card" style="text-align:center;padding:40px"><p style="color:#4a6080">Loading...</p></div>';
+    else if(!S.sessions||!S.sessions.length)body='<div class="card" style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px">📭</div><p style="color:#4a6080;font-size:15px">No requests yet</p></div>';
+    else body=S.sessions.map(function(s,si){
+      var rows=s.rows||[];
+      var rowsHtml=rows.map(function(r,ri){
+        return '<tr><td>'+ri+'</td><td>'+(r.heatNo||"")+'</td><td>'+(r.strand||"")+'</td><td>'+(r.batchNo||"")+'</td><td>'+(r.grade||"")+'</td><td>'+(r.length||"")+'</td><td>'+(r.quantity||"")+'</td><td>'+(r.locationFrom||"")+'</td><td>'+(r.locationTo||"")+'</td><td>'+(r.remarks||"")+'</td></tr>';
+      }).join('');
+      return '<div class="card" style="margin-bottom:14px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px">'+
+          '<div><p style="font-weight:800;color:#1e3a8a;font-size:15px;margin:0">'+s.workerName+' <span style="font-size:12px;color:#4a6080">('+s.workerId+')</span></p>'+
+          '<p style="font-size:12px;color:#4a6080;margin:4px 0 0">'+s.date+' | Start: '+(s.startTime||"")+' | End: '+(s.endTime||"")+' | Duration: '+(s.duration||"")+'</p></div>'+
+          '<div style="display:flex;gap:8px">'+
+            '<button data-dl="'+si+'" class="bp" style="padding:8px 12px;font-size:12px">&#11167; Excel</button>'+
+            '<button data-del="'+si+'" class="bs" style="padding:8px 12px;font-size:12px;background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Delete</button>'+
+          '</div>'+
+        '</div>'+
+        '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Heat No.</th><th>Strand</th><th>Batch No.</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'+
+      '</div>';
+    }).join('');
+  }
+  if(tab==="stock"){
+    var modeColor=listMode==="closed"?"#059669":"#2563eb";
+    var modeBg=listMode==="closed"?"rgba(5,150,105,0.1)":"rgba(37,99,235,0.1)";
+    var reservations=Object.entries(reservedBatches||{});
+    var resHtml=reservations.length?reservations.map(function(e){
+      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
+        '<span style="flex:1;color:#1e3a8a;font-weight:600;font-size:13px">'+e[0]+'<span style="color:#4a6080;font-size:11px;margin-left:8px">Reserved by '+e[1].workerName+'</span></span>'+
+        '<button data-release="'+e[0]+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Release</button>'+
+      '</div>';
+    }).join(''):'<p style="color:#4a6080;font-size:13px;text-align:center;padding:10px">No active reservations</p>';
+    body='<div class="card"><div class="card-title">&#128230; Upload SAP Stock File</div>'+
+      '<div style="margin-bottom:8px"><span style="font-size:12px;color:#4a6080">Last updated: '+(stockLastUpdate||"Never")+'</span></div>'+
+      '<input type="file" id="stockFile" accept=".xlsx,.xls" style="margin-bottom:10px"/>'+
+      '<button class="bs" id="btnClearStock" style="width:100%;padding:10px;margin-top:4px;background:rgba(220,38,38,0.08);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Clear Stock</button>'+
+      '</div>'+
+      '<div class="card"><div class="card-title">&#9881; List Mode</div>'+
+      '<div style="display:flex;align-items:center;gap:12px;padding:10px 0">'+
+        '<span style="font-size:14px;color:#1e3a8a;font-weight:600">Current Mode:</span>'+
+        '<span style="background:'+modeBg+';color:'+modeColor+';border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700">'+(listMode==="closed"?"🔒 Closed List":"🔓 Open List")+'</span>'+
+        '<button id="btnToggleMode" class="bp" style="padding:8px 14px;font-size:12px;margin-left:auto">Toggle Mode</button>'+
+      '</div></div>'+
+      '<div class="card"><div class="card-title">&#128274; Active Reservations</div>'+resHtml+'</div>';
+  }
+  if(tab==="searchfix"){
+    var sq=searchQuery||"";
+    var results=[];
+    if(sq.length>=2){
+      (S.sessions||[]).forEach(function(s){
+        (s.rows||[]).forEach(function(r,ri){
+          if((r.batchNo&&r.batchNo.toLowerCase().includes(sq.toLowerCase()))||(r.heatNo&&r.heatNo.toLowerCase().includes(sq.toLowerCase()))||(r.strand&&r.strand.toLowerCase().includes(sq.toLowerCase()))){
+            results.push({session:s,row:r,rowIdx:ri});
+          }
+        });
+      });
+    }
+    var resRows=results.map(function(item){
+      return '<div style="background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);padding:12px;margin-bottom:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+          '<div><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:13px">Batch: '+(item.row.batchNo||"")+'</p>'+
+          '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(item.row.heatNo||"")+' | Strand: '+(item.row.strand||"")+'</p>'+
+          '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Worker: '+item.session.workerName+' | Date: '+item.session.date+'</p></div>'+
+          '<button data-remove-sid="'+item.session.id+'" data-remove-ridx="'+item.rowIdx+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Remove Piece</button>'+
+        '</div></div>';
+    }).join('');
+    body='<div class="card"><div class="card-title">&#128269; Search & Fix</div>'+
+      '<input id="searchInput" placeholder="Search by Batch No., Heat No., or Strand..." value="'+(sq)+'"/>'+
+      '<div style="margin-top:14px">'+
+        (sq.length<2?'<p style="color:#4a6080;font-size:13px;text-align:center">Enter at least 2 characters to search</p>':
+         results.length?resRows:'<p style="color:#4a6080;font-size:13px;text-align:center">No results found for "'+sq+'"</p>')+
+      '</div></div>';
+  }
+  return body;
+}
+
 function supHTML(){
   var tp=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);
   var tabs='<div style="display:flex;gap:8px;margin-bottom:18px">'+
@@ -427,7 +506,10 @@ function bind(){
   var bwid=document.getElementById("btnWid");
   if(bwid) bwid.onclick=async function(){
     var id=document.getElementById("wid").value.trim().padStart(3,"0");
-    var name=WORKERS[id];
+    // Load latest workers from Firebase first
+    await loadDynamicWorkers();
+    var dw=S.dynamicWorkers||WORKERS;
+    var name=dw[id];
     if(!name){ss({workerIdErr:"ID not found."});return;}
     await loadAllBatchNos();await loadStockFromDB();await loadListMode();
     listenReservations();startTime=null;
@@ -760,9 +842,14 @@ async function loadColumnMapping(){
 }
 
 async function loadDynamicWorkers(){
-  try{var doc=await db.collection("settings").doc("workers").get();
-    if(doc.exists)ss({dynamicWorkers:doc.data().workers||{}});
-  }catch(e){}
+  try{
+    var doc=await db.collection("settings").doc("workers").get();
+    if(doc.exists&&doc.data().workers&&Object.keys(doc.data().workers).length>0){
+      ss({dynamicWorkers:doc.data().workers});
+    } else {
+      ss({dynamicWorkers:Object.assign({},WORKERS)});
+    }
+  }catch(e){ss({dynamicWorkers:Object.assign({},WORKERS)});}
 }
 
 async function loadDynamicSupervisors(){
@@ -898,7 +985,10 @@ function adminHTML(){
     {key:"remarks",label:"📝 Remarks"},
     {key:"workers",label:"👷 Workers"},
     {key:"supervisors",label:"📋 Supervisors"},
-    {key:"settings",label:"⚙️ Settings"}
+    {key:"settings",label:"⚙️ Settings"},
+    {key:"requests",label:"📋 Requests"},
+    {key:"stock",label:"📦 Stock"},
+    {key:"searchfix",label:"🔍 Search & Fix"}
   ];
   var tabs='<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">'+
     tabDefs.map(function(t){
@@ -969,6 +1059,14 @@ function adminHTML(){
       ['Worker','Supervisor','Admin'].map(function(r){
         return '<div style="margin-bottom:12px"><label class="lbl">'+r+' Password</label><div style="display:block"><input id="pw'+r+'" placeholder="Enter new password" type="password" style="flex:1;font-size:14px;padding:12px"/><button class="bp" id="btnSavePw'+r+'" style="width:100%;padding:12px;margin-top:8px">Save</button></div></div>';
       }).join('')+'</div>';
+  }
+
+  // Supervisor tabs inside Admin
+  if(tab==="requests"||tab==="stock"||tab==="searchfix"){
+    if(tab==="requests")S.supTab="requests";
+    else if(tab==="stock")S.supTab="stock";
+    else if(tab==="searchfix")S.supTab="searchfix";
+    body=supBody();
   }
 
   return topbarS()+
