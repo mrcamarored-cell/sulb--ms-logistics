@@ -636,8 +636,8 @@ function bind(){
   if(btnCM) btnCM.onclick=async function(){
     var nm={};
     document.querySelectorAll("[data-mapkey]").forEach(function(sel){nm[sel.dataset.mapkey]=sel.value;});
-    if(!nm.batchNo){alert("Please select the Batch No. column.");return;}
-    if(!nm.heatNo){alert("Please select the Heat No. column.");return;}
+    if(!nm.batchNo||nm.batchNo==="__null__"){alert("Batch No. is required — cannot be null.");return;}
+    if(!nm.heatNo||nm.heatNo==="__null__"){alert("Heat No. is required — cannot be null.");return;}
     columnMapping=nm;
     await processUpload(pendingUploadRows,nm);
   };
@@ -966,13 +966,18 @@ async function processUpload(rows,mapping){
       var bk=String(row[mapping.batchNo]||"").trim();
       var heat=String(row[mapping.heatNo]||"").trim();
       var strand=bk&&heat?bk.replace(heat,""):"";
+      function getField(key,row,mapping){
+        var col=mapping[key];
+        if(!col||col==="__null__")return "";
+        return String(row[col]||"");
+      }
       if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,
-        grade:String(mapping.grade?row[mapping.grade]||"":""),
-        length:String(mapping.length?row[mapping.length]||"":""),
-        materialType:String(mapping.materialType?row[mapping.materialType]||"":""),
-        availableStock:parseFloat(mapping.availableStock?(row[mapping.availableStock]||0):0),
-        storageLocation:String(mapping.storageLocation?row[mapping.storageLocation]||"":""),
-        storageBin:String(mapping.storageBin?row[mapping.storageBin]||"":"")};
+        grade:getField("grade",row,mapping),
+        length:getField("length",row,mapping),
+        materialType:getField("materialType",row,mapping),
+        availableStock:mapping.availableStock&&mapping.availableStock!=="__null__"?parseFloat(row[mapping.availableStock]||0):0,
+        storageLocation:getField("storageLocation",row,mapping),
+        storageBin:getField("storageBin",row,mapping)};
     });
     var updatedAt=new Date().toLocaleString("en-GB");
     var keys=Object.keys(items);var CHUNK=500;
@@ -1020,10 +1025,18 @@ function mappingScreenHTML(){
   var cols=pendingFileColumns;
   var rows=FIELD_DEFS.map(function(fd){
     var det=columnMapping&&columnMapping[fd.key]?columnMapping[fd.key]:"";
-    var status=det?'<span style="color:#059669;font-weight:700">&#10003; Detected</span>':'<span style="color:#d97706;font-weight:700">&#9888; Not found</span>';
+    var isNull=det==="__null__";
+    var isDetected=det&&!isNull;
+    var status=isNull?'<span style="color:#6b7280;font-weight:700">&#8709; Skipped</span>':
+               isDetected?'<span style="color:#059669;font-weight:700">&#10003; Detected</span>':
+               '<span style="color:#d97706;font-weight:700">&#9888; Not found</span>';
     var opts=cols.map(function(c){return '<option value="'+c+'"'+(c===det?' selected':'')+'>'+c+'</option>';}).join('');
+    var nullSelected=isNull?' selected':'';
     return '<tr><td style="padding:10px 8px;font-weight:700;color:#1e3a8a;font-size:13px">'+fd.label+'</td>'+
-      '<td style="padding:10px 8px"><select data-mapkey="'+fd.key+'" style="width:100%;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:8px;color:#1e3a8a;font-size:13px"><option value="">-- Select --</option>'+opts+'</select></td>'+
+      '<td style="padding:10px 8px"><select data-mapkey="'+fd.key+'" style="width:100%;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:8px;color:#1e3a8a;font-size:13px">'+
+      '<option value="">-- Select --</option>'+
+      '<option value="__null__"'+nullSelected+' style="color:#6b7280">null — Skip this field</option>'+
+      opts+'</select></td>'+
       '<td style="padding:10px 8px">'+status+'</td></tr>';
   }).join('');
   return topbarS()+
