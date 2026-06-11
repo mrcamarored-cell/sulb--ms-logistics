@@ -845,11 +845,11 @@ async function loadDynamicWorkers(){
   try{
     var doc=await db.collection("settings").doc("workers").get();
     if(doc.exists&&doc.data().workers&&Object.keys(doc.data().workers).length>0){
-      ss({dynamicWorkers:doc.data().workers});
+      S.dynamicWorkers=doc.data().workers;
     } else {
-      ss({dynamicWorkers:Object.assign({},WORKERS)});
+      S.dynamicWorkers=Object.assign({},WORKERS);
     }
-  }catch(e){ss({dynamicWorkers:Object.assign({},WORKERS)});}
+  }catch(e){S.dynamicWorkers=Object.assign({},WORKERS);}
 }
 
 async function loadDynamicSupervisors(){
