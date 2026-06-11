@@ -666,6 +666,7 @@ function bind(){
     var sid2=document.getElementById("newSid").value.trim().toUpperCase();
     var sn=document.getElementById("newSname").value.trim();
     if(!sid2||!sn){alert("Enter both ID and Name.");return;}
+    await loadDynamicSupervisors();
     dynamicSupervisors[sid2]=sn;
     await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
     draw();
@@ -674,18 +675,28 @@ function bind(){
     btn.onclick=async function(){
       var sid3=btn.getAttribute("data-del-sup");
       if(!confirm("Delete supervisor "+sid3+"?"))return;
+      await loadDynamicSupervisors();
       delete dynamicSupervisors[sid3];
       await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
       draw();
     };
   });
+  var pwKeys={Worker:"worker",Supervisor:"supervisor",Admin:"admin"};
   ["Worker","Supervisor","Admin"].forEach(function(r){
     var btn=document.getElementById("btnSavePw"+r);
     if(btn) btn.onclick=async function(){
       var val=document.getElementById("pw"+r).value.trim();
       if(!val){alert("Password cannot be empty.");return;}
-      try{await db.collection("settings").doc("passwords").set({[r.toLowerCase()]:val},{merge:true});
-        alert("Password updated for "+r);}catch(e){alert("Error: "+e.message);}
+      try{
+        var update={};update[pwKeys[r]]=val;
+        await db.collection("settings").doc("passwords").set(update,{merge:true});
+        // Update in memory immediately
+        if(r==="Worker")CREDS.Work.pw=val;
+        else if(r==="Supervisor")CREDS.Super.pw=val;
+        else if(r==="Admin")CREDS.Admin.pw=val;
+        document.getElementById("pw"+r).value="";
+        alert("Password updated for "+r+" successfully.");
+      }catch(e){alert("Error: "+e.message);}
     };
   });
 
@@ -834,6 +845,18 @@ function xlExport(s){
 }
 
 // ── Async loaders ──────────────────────────────────────────
+async function loadPasswords(){
+  try{
+    var doc=await db.collection("settings").doc("passwords").get();
+    if(doc.exists){
+      var data=doc.data();
+      if(data.worker) CREDS.Work.pw=data.worker;
+      if(data.supervisor) CREDS.Super.pw=data.supervisor;
+      if(data.admin) CREDS.Admin.pw=data.admin;
+    }
+  }catch(e){}
+}
+
 async function loadRemarks(){
   try{var doc=await db.collection("settings").doc("remarks").get();
     remarksOptions=doc.exists?(doc.data().options||remarksOptions):remarksOptions;
@@ -859,9 +882,13 @@ async function loadDynamicWorkers(){
 }
 
 async function loadDynamicSupervisors(){
-  try{var doc=await db.collection("settings").doc("supervisors").get();
-    if(doc.exists)dynamicSupervisors=doc.data().supervisors||SUPERVISORS;
-    else dynamicSupervisors=Object.assign({},SUPERVISORS);
+  try{
+    var doc=await db.collection("settings").doc("supervisors").get();
+    if(doc.exists&&doc.data().supervisors){
+      dynamicSupervisors=Object.assign({},SUPERVISORS,doc.data().supervisors);
+    } else {
+      dynamicSupervisors=Object.assign({},SUPERVISORS);
+    }
   }catch(e){dynamicSupervisors=Object.assign({},SUPERVISORS);}
 }
 
