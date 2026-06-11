@@ -586,6 +586,27 @@ function bind(){
     }catch(e){alert("Error clearing stock.");}
   };
 
+  // Toggle List Mode
+  var btnTM=document.getElementById("btnToggleMode");
+  if(btnTM) btnTM.onclick=async function(){
+    var newMode=listMode==="closed"?"open":"closed";
+    try{
+      await db.collection("settings").doc("listMode").set({mode:newMode});
+      listMode=newMode;draw();
+    }catch(e){alert("Error: "+e.message);}
+  };
+
+  // Reset Column Mapping
+  var btnRM=document.getElementById("btnResetMapping");
+  if(btnRM) btnRM.onclick=async function(){
+    if(!confirm("Reset column mapping? Next upload will ask you to re-select the columns."))return;
+    try{
+      await db.collection("settings").doc("columnMapping").delete();
+      columnMapping=null;
+      alert("\u2705 Column mapping reset successfully.");
+    }catch(e){alert("Error: "+e.message);}
+  };
+
   var sf=document.getElementById("stockFile");
   if(sf) sf.onchange=function(e){
     var file=e.target.files[0];if(!file)return;
