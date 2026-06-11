@@ -963,15 +963,15 @@ function listenPresence(){
 async function processUpload(rows,mapping){
   try{
     var items={};
+    function getField(key,row,mapping){
+      var col=mapping[key];
+      if(!col||col==="__null__")return "";
+      return String(row[col]||"");
+    }
     rows.forEach(function(row){
       var bk=String(row[mapping.batchNo]||"").trim();
       var heat=String(row[mapping.heatNo]||"").trim();
       var strand=bk&&heat?bk.replace(heat,""):"";
-      function getField(key,row,mapping){
-        var col=mapping[key];
-        if(!col||col==="__null__")return "";
-        return String(row[col]||"");
-      }
       if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,
         rollingSize:getField("rollingSize",row,mapping),
         grade:getField("grade",row,mapping),
