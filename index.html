@@ -945,10 +945,12 @@ async function loadDynamicWorkers(){
   try{
     var doc=await db.collection("settings").doc("workers").get();
     if(doc.exists&&doc.data().workers){
-      // Merge Firebase workers with default WORKERS
-      S.dynamicWorkers=Object.assign({},WORKERS,doc.data().workers);
+      // Read from Firebase only — no merge with defaults
+      S.dynamicWorkers=doc.data().workers;
     } else {
+      // First time — save defaults to Firebase
       S.dynamicWorkers=Object.assign({},WORKERS);
+      await db.collection("settings").doc("workers").set({workers:S.dynamicWorkers});
     }
   }catch(e){S.dynamicWorkers=Object.assign({},WORKERS);}
 }
@@ -957,9 +959,12 @@ async function loadDynamicSupervisors(){
   try{
     var doc=await db.collection("settings").doc("supervisors").get();
     if(doc.exists&&doc.data().supervisors){
-      dynamicSupervisors=Object.assign({},SUPERVISORS,doc.data().supervisors);
+      // Read from Firebase only — no merge with defaults
+      dynamicSupervisors=doc.data().supervisors;
     } else {
+      // First time — save defaults to Firebase
       dynamicSupervisors=Object.assign({},SUPERVISORS);
+      await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
     }
   }catch(e){dynamicSupervisors=Object.assign({},SUPERVISORS);}
 }
