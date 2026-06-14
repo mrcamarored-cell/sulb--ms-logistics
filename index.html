@@ -307,8 +307,8 @@ function supBody(){
           '<div><p style="font-weight:800;color:#1e3a8a;font-size:15px;margin:0">'+s.workerName+' <span style="font-size:12px;color:#4a6080">('+s.workerId+')</span></p>'+
           '<p style="font-size:12px;color:#4a6080;margin:4px 0 0">'+s.date+' | Start: '+(s.startTime||"")+' | End: '+(s.endTime||"")+' | Duration: '+(s.duration||"")+'</p></div>'+
           '<div style="display:flex;gap:8px">'+
-            '<button data-dl="'+si+'" class="bp" style="padding:8px 12px;font-size:12px">&#11167; Excel</button>'+
-            '<button data-del="'+si+'" class="bs" style="padding:8px 12px;font-size:12px;background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Delete</button>'+
+            '<button data-ex="'+s.id+'" class="bp" style="padding:8px 12px;font-size:12px">&#11167; Excel</button>'+
+            '<button data-da="'+s.id+'" class="bs" style="padding:8px 12px;font-size:12px;background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Delete</button>'+
           '</div>'+
         '</div>'+
         '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Heat No.</th><th>Strand</th><th>Batch No.</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'+
@@ -356,7 +356,7 @@ function supBody(){
           '<div><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:13px">Batch: '+(item.row.batchNo||"")+'</p>'+
           '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(item.row.heatNo||"")+' | Strand: '+(item.row.strand||"")+'</p>'+
           '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Worker: '+item.session.workerName+' | Date: '+item.session.date+'</p></div>'+
-          '<button data-remove-sid="'+item.session.id+'" data-remove-ridx="'+item.rowIdx+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Remove Piece</button>'+
+          '<button data-dc="'+item.session.id+'" data-ridx="'+item.rowIdx+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Remove Piece</button>'+
         '</div></div>';
     }).join('');
     body='<div class="card"><div class="card-title">&#128269; Search & Fix</div>'+
@@ -837,7 +837,29 @@ function bind(){
     b.onclick=function(e){ss({delC:e.target.dataset.da});};
   });
   document.querySelectorAll("[data-dc]").forEach(function(b){
-    b.onclick=async function(e){try{await db.collection("deliveryNotes").doc(e.target.dataset.dc).delete();ss({delC:null});}catch(e){alert("Error.");}};
+    b.onclick=async function(e){
+      var sid=e.target.dataset.dc;
+      var ridx=e.target.dataset.ridx;
+      if(ridx!==undefined){
+        // Remove single piece from session
+        var session=S.sessions.find(function(x){return x.id===sid;});
+        if(!session)return;
+        if(!confirm("Remove this piece?"))return;
+        var newRows=(session.rows||[]).filter(function(r,i){return i!==parseInt(ridx);});
+        try{
+          await db.collection("deliveryNotes").doc(sid).update({rows:newRows});
+          // Release reservation
+          var removedRow=(session.rows||[])[parseInt(ridx)];
+          if(removedRow&&removedRow.batchNo){
+            try{await db.collection("reservations").doc(removedRow.batchNo).delete();}catch(ex){}
+          }
+          ss({delC:null});
+        }catch(e){alert("Error removing piece.");}
+      } else {
+        // Delete full session
+        try{await db.collection("deliveryNotes").doc(sid).delete();ss({delC:null});}catch(e){alert("Error.");}
+      }
+    };
   });
   var bdc=document.getElementById("btnDC");
   if(bdc) bdc.onclick=function(){ss({delC:null});};
