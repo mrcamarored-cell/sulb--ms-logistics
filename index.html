@@ -308,7 +308,7 @@ function supBody(){
           '<p style="font-size:12px;color:#4a6080;margin:4px 0 0">'+s.date+' | Start: '+(s.startTime||"")+' | End: '+(s.endTime||"")+' | Duration: '+(s.duration||"")+'</p></div>'+
           '<div style="display:flex;gap:8px">'+
             '<button data-ex="'+s.id+'" class="bp" style="padding:8px 12px;font-size:12px">&#11167; Excel</button>'+
-            '<button data-da="'+s.id+'" class="bs" style="padding:8px 12px;font-size:12px;background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Delete</button>'+
+            '<button data-dc="'+s.id+'" class="bs" style="padding:8px 12px;font-size:12px;background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Delete</button>'+
           '</div>'+
         '</div>'+
         '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Heat No.</th><th>Strand</th><th>Batch No.</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'+
@@ -857,6 +857,7 @@ function bind(){
         }catch(e){alert("Error removing piece.");}
       } else {
         // Delete full session
+        if(!confirm("Delete this request permanently?"))return;
         try{await db.collection("deliveryNotes").doc(sid).delete();ss({delC:null});}catch(e){alert("Error.");}
       }
     };
