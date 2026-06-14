@@ -523,8 +523,9 @@ function bind(){
       hdr:{sheetNo:"",date:fmtDate(new Date()),operator:name,startTime:"",endTime:""}});
   };
   var btnRefresh=document.getElementById("btnRefresh");
-  if(btnRefresh) btnRefresh.onclick=function(){
-    loadStockFromDB();
+  if(btnRefresh) btnRefresh.onclick=async function(){
+    await loadRemarks();
+    await loadStockFromDB();
     if(S.role==="supervisor"||S.role==="admin"){load();}
     draw();
   };
