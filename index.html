@@ -837,10 +837,10 @@ function bind(){
     if(!filled.length){alert("Please enter at least one Heat No.");return;}
     var reserved=filled.filter(function(r){return r.reserved;});
     if(reserved.length){alert("Reserved by others:\n"+reserved.map(function(r){return r.batchNo+" — "+r.reservedBy;}).join("\n"));return;}
-    var already=filled.filter(function(r){return r.alreadySubmitted;});
+    var already=filled.filter(function(r){return r.alreadySubmitted&&r.remarks!=="No details";});
     if(already.length){alert("Already submitted:\n"+already.map(function(r){return r.batchNo;}).join("\n"));return;}
-    var notFound=filled.filter(function(r){return r.notFound;});
-    if(notFound.length&&listMode==="closed"){alert("Not in stock:\n"+notFound.map(function(r){return r.batchNo;}).join("\n"));return;}
+    var notFound=filled.filter(function(r){return r.notFound&&r.remarks!=="No details";});
+    if(notFound.length&&listMode==="closed"){alert("Not in stock:\n"+notFound.map(function(r){return r.batchNo;}).join("\n")+"\n\nUse 'No details' remark to add pieces not in stock.");return;}
     var dups=filled.filter(function(r,i){
       if(r.remarks==="No details")return false;
       var batch=(r.heatNo||"")+(r.strand||"");
