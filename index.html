@@ -492,7 +492,7 @@ function bind(){
     if(c&&c.pw===p){
       if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}
       else if(c.role==="supervisor"){await loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}
-      else if(c.role==="admin"){await Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]);listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}
+      else if(c.role==="admin"){await Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]);load();loadStockFromDB();listenReservations();listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}
     } else document.getElementById("le").style.display="block";
   };
   var tp=document.getElementById("tp");
