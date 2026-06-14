@@ -98,7 +98,6 @@ let showMappingScreen=false;
 const FIELD_DEFS=[
   {key:"batchNo",label:"Batch No.",keywords:["batch"]},
   {key:"heatNo",label:"Heat No.",keywords:["heat","ccm heat"]},
-  {key:"rollingSize",label:"Rolling Size",keywords:["rolling","size","rolling size"]},
   {key:"grade",label:"Grade",keywords:["grade","ccm grade"]},
   {key:"length",label:"Length",keywords:["length","ccm length"]},
   {key:"materialType",label:"Material Type",keywords:["product type","material","ccm product"]},
@@ -198,7 +197,6 @@ function html(){
   if(S.role==="supervisor"&&S.supervisorStep)return supervisorIdHTML();
   if(S.role==="supervisor"&&showMappingScreen)return mappingScreenHTML();
   if(S.role==="supervisor")return supHTML();
-  if(S.role==="admin"&&showMappingScreen)return mappingScreenHTML();
   if(S.role==="admin")return adminHTML();
   return loginHTML();
 }
@@ -208,7 +206,7 @@ function topbarW(){
   var modeTag=listMode==="closed"?
     '<span style="display:inline-block;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#6ee7b7;font-weight:700;margin-left:6px">&#128274; Closed List</span>':
     '<span style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#93c5fd;font-weight:700;margin-left:6px">&#128275; Open List</span>';
-  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);color:#93c5fd">&#128119; '+S.workerName+'</span>'+modeTag+'<span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company | ID: '+S.workerId+'</p></div><div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="blog" id="btnLogout">&#128682; Logout</button></div></div>';
+  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);color:#93c5fd">&#128119; '+S.workerName+'</span>'+modeTag+'<span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company | ID: '+S.workerId+'</p></div><button class="blog" id="btnLogout">&#128682; Logout</button></div>';
 }
 function topbarS(){
   var sn=S.supervisorName?' <span style="background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;color:#93c5fd;margin-left:8px">&#128203; '+S.supervisorName+'</span>':'';
@@ -290,85 +288,6 @@ function workerHTML(){
 }
 
 
-function supBody(){
-  var tp=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);
-  var tab=S.supTab||"requests";
-  var body="";
-  if(tab==="requests"){
-    if(S.loading)body='<div class="card" style="text-align:center;padding:40px"><p style="color:#4a6080">Loading...</p></div>';
-    else if(!S.sessions||!S.sessions.length)body='<div class="card" style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px">📭</div><p style="color:#4a6080;font-size:15px">No requests yet</p></div>';
-    else body=S.sessions.map(function(s,si){
-      var rows=s.rows||[];
-      var rowsHtml=rows.map(function(r,ri){
-        return '<tr><td>'+ri+'</td><td>'+(r.heatNo||"")+'</td><td>'+(r.strand||"")+'</td><td>'+(r.batchNo||"")+'</td><td>'+(r.grade||"")+'</td><td>'+(r.length||"")+'</td><td>'+(r.quantity||"")+'</td><td>'+(r.locationFrom||"")+'</td><td>'+(r.locationTo||"")+'</td><td>'+(r.remarks||"")+'</td></tr>';
-      }).join('');
-      return '<div class="card" style="margin-bottom:14px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px">'+
-          '<div><p style="font-weight:800;color:#1e3a8a;font-size:15px;margin:0">'+s.workerName+' <span style="font-size:12px;color:#4a6080">('+s.workerId+')</span></p>'+
-          '<p style="font-size:12px;color:#4a6080;margin:4px 0 0">'+(s.header&&s.header.date?s.header.date:s.date||"")+' | Start: '+(s.header&&s.header.startTime?s.header.startTime:"")+' | End: '+(s.header&&s.header.endTime?s.header.endTime:"")+' | Duration: '+(s.timeTaken||"")+'</p></div>'+
-          '<div style="display:flex;gap:8px">'+
-            '<button data-ex="'+s.id+'" class="bp" style="padding:8px 12px;font-size:12px">&#11167; Excel</button>'+
-            '<button data-dc="'+s.id+'" class="bs" style="padding:8px 12px;font-size:12px;background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Delete</button>'+
-          '</div>'+
-        '</div>'+
-        '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Heat No.</th><th>Strand</th><th>Batch No.</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'+
-      '</div>';
-    }).join('');
-  }
-  if(tab==="stock"){
-    var modeColor=listMode==="closed"?"#059669":"#2563eb";
-    var modeBg=listMode==="closed"?"rgba(5,150,105,0.1)":"rgba(37,99,235,0.1)";
-    var reservations=Object.entries(reservedBatches||{});
-    var resHtml=reservations.length?reservations.map(function(e){
-      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
-        '<span style="flex:1;color:#1e3a8a;font-weight:600;font-size:13px">'+e[0]+'<span style="color:#4a6080;font-size:11px;margin-left:8px">Reserved by '+e[1].workerName+'</span></span>'+
-        '<button data-release="'+e[0]+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Release</button>'+
-      '</div>';
-    }).join(''):'<p style="color:#4a6080;font-size:13px;text-align:center;padding:10px">No active reservations</p>';
-    body='<div class="card"><div class="card-title">&#128230; Upload SAP Stock File</div>'+
-      '<div style="margin-bottom:8px"><span style="font-size:12px;color:#4a6080">Last updated: '+(stockLastUpdate||"Never")+'</span></div>'+
-      '<label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:block;text-align:center;margin-bottom:8px">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label>'+
-      '<button class="bs" id="btnClearStock" style="width:100%;padding:10px;margin-top:4px;background:rgba(220,38,38,0.08);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Clear Stock</button>'+
-      '<button class="bs" id="btnResetMapping" style="width:100%;padding:10px;margin-top:8px;background:rgba(245,158,11,0.08);color:#d97706;border:1px solid rgba(245,158,11,0.3)">&#128257; Reset Column Mapping</button>'+
-      '</div>'+
-      '<div class="card"><div class="card-title">&#9881; List Mode</div>'+
-      '<div style="display:flex;gap:10px;margin-bottom:12px">'+
-      '<button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button>'+
-      '<button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button>'+
-      '</div></div>'+
-      '<div class="card"><div class="card-title">&#128274; Active Reservations</div>'+resHtml+'</div>';
-  }
-  if(tab==="searchfix"){
-    var sq=searchQuery||"";
-    var results=[];
-    if(sq.length>=2){
-      (S.sessions||[]).forEach(function(s){
-        (s.rows||[]).forEach(function(r,ri){
-          if((r.batchNo&&r.batchNo.toLowerCase().includes(sq.toLowerCase()))||(r.heatNo&&r.heatNo.toLowerCase().includes(sq.toLowerCase()))||(r.strand&&r.strand.toLowerCase().includes(sq.toLowerCase()))){
-            results.push({session:s,row:r,rowIdx:ri});
-          }
-        });
-      });
-    }
-    var resRows=results.map(function(item){
-      return '<div style="background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);padding:12px;margin-bottom:8px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
-          '<div><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:13px">Batch: '+(item.row.batchNo||"")+'</p>'+
-          '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(item.row.heatNo||"")+' | Strand: '+(item.row.strand||"")+'</p>'+
-          '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Worker: '+item.session.workerName+' | Date: '+item.session.date+'</p></div>'+
-          '<button data-dc="'+item.session.id+'" data-ridx="'+item.rowIdx+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Remove Piece</button>'+
-        '</div></div>';
-    }).join('');
-    body='<div class="card"><div class="card-title">&#128269; Search & Fix</div>'+
-      '<input id="searchInput" placeholder="Search by Batch No., Heat No., or Strand..." value="'+(sq)+'"/>'+
-      '<div style="margin-top:14px">'+
-        (sq.length<2?'<p style="color:#4a6080;font-size:13px;text-align:center">Enter at least 2 characters to search</p>':
-         results.length?resRows:'<p style="color:#4a6080;font-size:13px;text-align:center">No results found for "'+sq+'"</p>')+
-      '</div></div>';
-  }
-  return body;
-}
-
 function supHTML(){
   var tp=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);
   var tabs='<div style="display:flex;gap:8px;margin-bottom:18px">'+
@@ -434,7 +353,6 @@ function supHTML(){
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
       '<label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:inline-block">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label>'+
       (stockCount>0?'<button id="btnClearStock" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:10px 16px;color:#dc2626;font-weight:700;font-size:13px;cursor:pointer">&#128465; Clear Stock</button>':'')+
-      '<button id="btnResetMapping" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px 16px;color:#d97706;font-weight:700;font-size:13px;cursor:pointer">&#128257; Reset Column Mapping</button>'+
       '</div></div></div>'+
       '<div class="card-title">&#128275; List Mode</div>'+
       '<div style="display:flex;gap:10px;margin-bottom:12px">'+
@@ -483,16 +401,14 @@ function supHTML(){
 
 function bind(){
   var bl=document.getElementById("btnLogin");
-  if(bl) bl.onclick=async function(){
+  if(bl) bl.onclick=function(){
     var u=document.getElementById("iu").value.trim();
     var p=document.getElementById("ip").value;
-    // Load latest passwords from Firebase before checking
-    await loadPasswords();
     var c=CREDS[u];
     if(c&&c.pw===p){
       if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}
-      else if(c.role==="supervisor"){await loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}
-      else if(c.role==="admin"){await Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]);load();loadStockFromDB();listenReservations();listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}
+      else if(c.role==="supervisor"){loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}
+      else if(c.role==="admin"){loadRemarks();loadDynamicWorkers();loadDynamicSupervisors();listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}
     } else document.getElementById("le").style.display="block";
   };
   var tp=document.getElementById("tp");
@@ -501,7 +417,6 @@ function bind(){
   var bsid=document.getElementById("btnSid");
   if(bsid) bsid.onclick=async function(){
     var sid=document.getElementById("sid").value.trim().toUpperCase();
-    await loadDynamicSupervisors();
     var sname=dynamicSupervisors[sid];
     if(!sname){ss({supervisorIdErr:"ID not found. Please try again."});return;}
     ss({supervisorStep:false,supervisorId:sid,supervisorName:sname,supervisorIdErr:"",submitted:false,supTab:"requests"});
@@ -512,38 +427,13 @@ function bind(){
   var bwid=document.getElementById("btnWid");
   if(bwid) bwid.onclick=async function(){
     var id=document.getElementById("wid").value.trim().padStart(3,"0");
-    // Load latest workers from Firebase first
-    await loadDynamicWorkers();
-    var dw=S.dynamicWorkers||WORKERS;
-    var name=dw[id];
+    var name=WORKERS[id];
     if(!name){ss({workerIdErr:"ID not found."});return;}
     await loadAllBatchNos();await loadStockFromDB();await loadListMode();
     listenReservations();startTime=null;
     registerPresence(name+' ('+id+')','Worker');ss({workerStep:false,workerId:id,workerName:name,workerIdErr:"",submitted:false,rows:[er()],
       hdr:{sheetNo:"",date:fmtDate(new Date()),operator:name,startTime:"",endTime:""}});
   };
-  var btnRefresh=document.getElementById("btnRefresh");
-  if(btnRefresh) btnRefresh.onclick=async function(){
-    await loadRemarks();
-    await loadStockFromDB();
-    if(S.role==="supervisor"||S.role==="admin"){load();}
-    draw();
-  };
-
-  var btnClean=document.getElementById("btnCleanPresence");
-  if(btnClean) btnClean.onclick=async function(){
-    try{
-      var snap=await db.collection("presence").get();
-      var now=Date.now();
-      var batch=db.batch();
-      snap.docs.forEach(function(d){
-        var data=d.data();
-        if(!data.lastSeen||(now-data.lastSeen)>45000)batch.delete(d.ref);
-      });
-      await batch.commit();
-    }catch(e){alert("Error: "+e.message);}
-  };
-
   var bo=document.getElementById("btnOut");
   if(bo) bo.onclick=async function(){
     await removePresence();
@@ -609,27 +499,6 @@ function bind(){
     }catch(e){alert("Error clearing stock.");}
   };
 
-  // Toggle List Mode
-  var btnTM=document.getElementById("btnToggleMode");
-  if(btnTM) btnTM.onclick=async function(){
-    var newMode=listMode==="closed"?"open":"closed";
-    try{
-      await db.collection("settings").doc("listMode").set({mode:newMode});
-      listMode=newMode;draw();
-    }catch(e){alert("Error: "+e.message);}
-  };
-
-  // Reset Column Mapping
-  var btnRM=document.getElementById("btnResetMapping");
-  if(btnRM) btnRM.onclick=async function(){
-    if(!confirm("Reset column mapping? Next upload will ask you to re-select the columns."))return;
-    try{
-      await db.collection("settings").doc("columnMapping").delete();
-      columnMapping=null;
-      alert("\u2705 Column mapping reset successfully.");
-    }catch(e){alert("Error: "+e.message);}
-  };
-
   var sf=document.getElementById("stockFile");
   if(sf) sf.onchange=function(e){
     var file=e.target.files[0];if(!file)return;
@@ -659,8 +528,8 @@ function bind(){
   if(btnCM) btnCM.onclick=async function(){
     var nm={};
     document.querySelectorAll("[data-mapkey]").forEach(function(sel){nm[sel.dataset.mapkey]=sel.value;});
-    if(!nm.batchNo||nm.batchNo==="__null__"){alert("Batch No. is required — cannot be null.");return;}
-    if(!nm.heatNo||nm.heatNo==="__null__"){alert("Heat No. is required — cannot be null.");return;}
+    if(!nm.batchNo){alert("Please select the Batch No. column.");return;}
+    if(!nm.heatNo){alert("Please select the Heat No. column.");return;}
     columnMapping=nm;
     await processUpload(pendingUploadRows,nm);
   };
@@ -690,24 +559,19 @@ function bind(){
     var wid2=document.getElementById("newWid").value.trim();
     var wn=document.getElementById("newWname").value.trim();
     if(!wid2||!wn){alert("Enter both ID and Name.");return;}
-    // Always reload from Firebase first to avoid overwriting
-    await loadDynamicWorkers();
-    var dw2=Object.assign({},S.dynamicWorkers);
+    var dw2=Object.assign({},(S.dynamicWorkers||WORKERS));
     dw2[wid2]=wn;
     await db.collection("settings").doc("workers").set({workers:dw2});
-    S.dynamicWorkers=dw2;
-    draw();
+    ss({dynamicWorkers:dw2});
   };
   document.querySelectorAll("[data-del-worker]").forEach(function(btn){
     btn.onclick=async function(){
       var wid3=btn.getAttribute("data-del-worker");
       if(!confirm("Delete worker "+wid3+"?"))return;
-      await loadDynamicWorkers();
-      var dw3=Object.assign({},S.dynamicWorkers);
+      var dw3=Object.assign({},(S.dynamicWorkers||WORKERS));
       delete dw3[wid3];
       await db.collection("settings").doc("workers").set({workers:dw3});
-      S.dynamicWorkers=dw3;
-      draw();
+      ss({dynamicWorkers:dw3});
     };
   });
   var btnAS=document.getElementById("btnAddSup");
@@ -715,7 +579,6 @@ function bind(){
     var sid2=document.getElementById("newSid").value.trim().toUpperCase();
     var sn=document.getElementById("newSname").value.trim();
     if(!sid2||!sn){alert("Enter both ID and Name.");return;}
-    await loadDynamicSupervisors();
     dynamicSupervisors[sid2]=sn;
     await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
     draw();
@@ -724,28 +587,18 @@ function bind(){
     btn.onclick=async function(){
       var sid3=btn.getAttribute("data-del-sup");
       if(!confirm("Delete supervisor "+sid3+"?"))return;
-      await loadDynamicSupervisors();
       delete dynamicSupervisors[sid3];
       await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
       draw();
     };
   });
-  var pwKeys={Worker:"worker",Supervisor:"supervisor",Admin:"admin"};
   ["Worker","Supervisor","Admin"].forEach(function(r){
     var btn=document.getElementById("btnSavePw"+r);
     if(btn) btn.onclick=async function(){
       var val=document.getElementById("pw"+r).value.trim();
       if(!val){alert("Password cannot be empty.");return;}
-      try{
-        var update={};update[pwKeys[r]]=val;
-        await db.collection("settings").doc("passwords").set(update,{merge:true});
-        // Update in memory immediately
-        if(r==="Worker")CREDS.Work.pw=val;
-        else if(r==="Supervisor")CREDS.Super.pw=val;
-        else if(r==="Admin")CREDS.Admin.pw=val;
-        document.getElementById("pw"+r).value="";
-        alert("Password updated for "+r+" successfully.");
-      }catch(e){alert("Error: "+e.message);}
+      try{await db.collection("settings").doc("passwords").set({[r.toLowerCase()]:val},{merge:true});
+        alert("Password updated for "+r);}catch(e){alert("Error: "+e.message);}
     };
   });
 
@@ -793,7 +646,7 @@ function bind(){
           if(reservedBatches[batch]&&reservedBatches[batch].workerId!==S.workerId){S.rows[i].reserved=true;S.rows[i].reservedBy=reservedBatches[batch].workerName;}
           else if(!allBatchNos.has(batch)) reserveBatch(batch);
           if(listMode==="closed"){
-            if(stockData[batch]){var item=stockData[batch];S.rows[i].grade=item.grade||"";S.rows[i].length=String(item.length||"");S.rows[i].materialType=item.materialType||"";S.rows[i].locationFrom=item.storageLocation||"";S.rows[i].rollingSize=item.rollingSize||"";S.rows[i].quantity=String(item.availableStock||"");S.rows[i].autoFilled=true;S.rows[i].notFound=false;}
+            if(stockData[batch]){var item=stockData[batch];S.rows[i].grade=item.grade||"";S.rows[i].length=String(item.length||"");S.rows[i].materialType=item.materialType||"";S.rows[i].locationFrom=item.storageLocation||"";S.rows[i].autoFilled=true;S.rows[i].notFound=false;}
             else{S.rows[i].autoFilled=false;S.rows[i].notFound=true;}
           }
         }
@@ -859,30 +712,7 @@ function bind(){
     b.onclick=function(e){ss({delC:e.target.dataset.da});};
   });
   document.querySelectorAll("[data-dc]").forEach(function(b){
-    b.onclick=async function(e){
-      var sid=e.target.dataset.dc;
-      var ridx=e.target.dataset.ridx;
-      if(ridx!==undefined){
-        // Remove single piece from session
-        var session=S.sessions.find(function(x){return x.id===sid;});
-        if(!session)return;
-        if(!confirm("Remove this piece?"))return;
-        var newRows=(session.rows||[]).filter(function(r,i){return i!==parseInt(ridx);});
-        try{
-          await db.collection("deliveryNotes").doc(sid).update({rows:newRows});
-          // Release reservation
-          var removedRow=(session.rows||[])[parseInt(ridx)];
-          if(removedRow&&removedRow.batchNo){
-            try{await db.collection("reservations").doc(removedRow.batchNo).delete();}catch(ex){}
-          }
-          ss({delC:null});
-        }catch(e){alert("Error removing piece.");}
-      } else {
-        // Delete full session
-        if(!confirm("Delete this request permanently?"))return;
-        try{await db.collection("deliveryNotes").doc(sid).delete();ss({delC:null});}catch(e){alert("Error.");}
-      }
-    };
+    b.onclick=async function(e){try{await db.collection("deliveryNotes").doc(e.target.dataset.dc).delete();ss({delC:null});}catch(e){alert("Error.");}};
   });
   var bdc=document.getElementById("btnDC");
   if(bdc) bdc.onclick=function(){ss({delC:null});};
@@ -917,18 +747,6 @@ function xlExport(s){
 }
 
 // ── Async loaders ──────────────────────────────────────────
-async function loadPasswords(){
-  try{
-    var doc=await db.collection("settings").doc("passwords").get();
-    if(doc.exists){
-      var data=doc.data();
-      if(data.worker) CREDS.Work.pw=data.worker;
-      if(data.supervisor) CREDS.Super.pw=data.supervisor;
-      if(data.admin) CREDS.Admin.pw=data.admin;
-    }
-  }catch(e){}
-}
-
 async function loadRemarks(){
   try{var doc=await db.collection("settings").doc("remarks").get();
     remarksOptions=doc.exists?(doc.data().options||remarksOptions):remarksOptions;
@@ -942,39 +760,22 @@ async function loadColumnMapping(){
 }
 
 async function loadDynamicWorkers(){
-  try{
-    var doc=await db.collection("settings").doc("workers").get();
-    if(doc.exists&&doc.data().workers){
-      // Read from Firebase only — no merge with defaults
-      S.dynamicWorkers=doc.data().workers;
-    } else {
-      // First time — save defaults to Firebase
-      S.dynamicWorkers=Object.assign({},WORKERS);
-      await db.collection("settings").doc("workers").set({workers:S.dynamicWorkers});
-    }
-  }catch(e){S.dynamicWorkers=Object.assign({},WORKERS);}
+  try{var doc=await db.collection("settings").doc("workers").get();
+    if(doc.exists)ss({dynamicWorkers:doc.data().workers||{}});
+  }catch(e){}
 }
 
 async function loadDynamicSupervisors(){
-  try{
-    var doc=await db.collection("settings").doc("supervisors").get();
-    if(doc.exists&&doc.data().supervisors){
-      // Read from Firebase only — no merge with defaults
-      dynamicSupervisors=doc.data().supervisors;
-    } else {
-      // First time — save defaults to Firebase
-      dynamicSupervisors=Object.assign({},SUPERVISORS);
-      await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
-    }
+  try{var doc=await db.collection("settings").doc("supervisors").get();
+    if(doc.exists)dynamicSupervisors=doc.data().supervisors||SUPERVISORS;
+    else dynamicSupervisors=Object.assign({},SUPERVISORS);
   }catch(e){dynamicSupervisors=Object.assign({},SUPERVISORS);}
 }
 
 // ── Presence ───────────────────────────────────────────────
 async function registerPresence(name,role){
   try{
-    // Restore presenceId from sessionStorage if exists
-    if(!presenceId)presenceId=sessionStorage.getItem('presenceId');
-    if(!presenceId){presenceId=Date.now().toString(36)+Math.random().toString(36).slice(2);sessionStorage.setItem('presenceId',presenceId);}
+    presenceId=presenceId||(Date.now().toString(36)+Math.random().toString(36).slice(2));
     await db.collection("presence").doc(presenceId).set({
       name:name,role:role,
       loginTime:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}),
@@ -993,12 +794,8 @@ async function registerPresence(name,role){
 
 async function removePresence(){
   if(presenceInterval){clearInterval(presenceInterval);presenceInterval=null;}
-  // Try to get presenceId from sessionStorage if not in memory
-  if(!presenceId)presenceId=sessionStorage.getItem('presenceId');
   if(!presenceId)return;
-  try{await db.collection("presence").doc(presenceId).delete();}catch(e){}
-  presenceId=null;
-  sessionStorage.removeItem('presenceId');
+  try{await db.collection("presence").doc(presenceId).delete();presenceId=null;}catch(e){}
 }
 
 let unsubPresence=null;
@@ -1008,7 +805,7 @@ function listenPresence(){
     var users=[];var now=Date.now();
     snap.docs.forEach(function(d){
       var data=d.data();
-      if(data.lastSeen&&(now-data.lastSeen)<45000)users.push(data);
+      if(data.lastSeen&&(now-data.lastSeen)<120000)users.push(data);
     });
     users.sort(function(a,b){return b.lastSeen-a.lastSeen;});
     ss({onlineUsers:users});
@@ -1019,23 +816,17 @@ function listenPresence(){
 async function processUpload(rows,mapping){
   try{
     var items={};
-    function getField(key,row,mapping){
-      var col=mapping[key];
-      if(!col||col==="__null__")return "";
-      return String(row[col]||"");
-    }
     rows.forEach(function(row){
       var bk=String(row[mapping.batchNo]||"").trim();
       var heat=String(row[mapping.heatNo]||"").trim();
       var strand=bk&&heat?bk.replace(heat,""):"";
       if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,
-        rollingSize:getField("rollingSize",row,mapping),
-        grade:getField("grade",row,mapping),
-        length:getField("length",row,mapping),
-        materialType:getField("materialType",row,mapping),
-        availableStock:mapping.availableStock&&mapping.availableStock!=="__null__"?parseFloat(row[mapping.availableStock]||0):0,
-        storageLocation:getField("storageLocation",row,mapping),
-        storageBin:getField("storageBin",row,mapping)};
+        grade:String(mapping.grade?row[mapping.grade]||"":""),
+        length:String(mapping.length?row[mapping.length]||"":""),
+        materialType:String(mapping.materialType?row[mapping.materialType]||"":""),
+        availableStock:parseFloat(mapping.availableStock?(row[mapping.availableStock]||0):0),
+        storageLocation:String(mapping.storageLocation?row[mapping.storageLocation]||"":""),
+        storageBin:String(mapping.storageBin?row[mapping.storageBin]||"":"")};
     });
     var updatedAt=new Date().toLocaleString("en-GB");
     var keys=Object.keys(items);var CHUNK=500;
@@ -1083,18 +874,10 @@ function mappingScreenHTML(){
   var cols=pendingFileColumns;
   var rows=FIELD_DEFS.map(function(fd){
     var det=columnMapping&&columnMapping[fd.key]?columnMapping[fd.key]:"";
-    var isNull=det==="__null__";
-    var isDetected=det&&!isNull;
-    var status=isNull?'<span style="color:#6b7280;font-weight:700">&#8709; Skipped</span>':
-               isDetected?'<span style="color:#059669;font-weight:700">&#10003; Detected</span>':
-               '<span style="color:#d97706;font-weight:700">&#9888; Not found</span>';
+    var status=det?'<span style="color:#059669;font-weight:700">&#10003; Detected</span>':'<span style="color:#d97706;font-weight:700">&#9888; Not found</span>';
     var opts=cols.map(function(c){return '<option value="'+c+'"'+(c===det?' selected':'')+'>'+c+'</option>';}).join('');
-    var nullSelected=isNull?' selected':'';
     return '<tr><td style="padding:10px 8px;font-weight:700;color:#1e3a8a;font-size:13px">'+fd.label+'</td>'+
-      '<td style="padding:10px 8px"><select data-mapkey="'+fd.key+'" style="width:100%;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:8px;color:#1e3a8a;font-size:13px">'+
-      '<option value="">-- Select --</option>'+
-      '<option value="__null__"'+nullSelected+' style="color:#6b7280">null — Skip this field</option>'+
-      opts+'</select></td>'+
+      '<td style="padding:10px 8px"><select data-mapkey="'+fd.key+'" style="width:100%;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:8px;color:#1e3a8a;font-size:13px"><option value="">-- Select --</option>'+opts+'</select></td>'+
       '<td style="padding:10px 8px">'+status+'</td></tr>';
   }).join('');
   return topbarS()+
@@ -1115,10 +898,7 @@ function adminHTML(){
     {key:"remarks",label:"📝 Remarks"},
     {key:"workers",label:"👷 Workers"},
     {key:"supervisors",label:"📋 Supervisors"},
-    {key:"settings",label:"⚙️ Settings"},
-    {key:"requests",label:"📋 Requests"},
-    {key:"stock",label:"📦 Stock"},
-    {key:"searchfix",label:"🔍 Search & Fix"}
+    {key:"settings",label:"⚙️ Settings"}
   ];
   var tabs='<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">'+
     tabDefs.map(function(t){
@@ -1191,19 +971,11 @@ function adminHTML(){
       }).join('')+'</div>';
   }
 
-  // Supervisor tabs inside Admin
-  if(tab==="requests"||tab==="stock"||tab==="searchfix"){
-    if(tab==="requests")S.supTab="requests";
-    else if(tab==="stock")S.supTab="stock";
-    else if(tab==="searchfix")S.supTab="searchfix";
-    body=supBody();
-  }
-
   return topbarS()+
     '<div class="wrap">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
       '<div><p style="font-size:18px;font-weight:800;color:#1e3a8a;margin:0">Admin Panel</p><p style="font-size:12px;color:#4a6080;margin:0">System Administration</p></div>'+
-      '<div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="bs" id="btnOut" style="padding:8px 14px;font-size:12px">Sign Out</button></div>'+
+      '<button class="bs" id="btnOut" style="padding:8px 14px;font-size:12px">Sign Out</button>'+
     '</div>'+tabs+body+'</div>';
 }
 
