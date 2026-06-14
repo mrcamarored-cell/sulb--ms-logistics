@@ -529,6 +529,20 @@ function bind(){
     draw();
   };
 
+  var btnClean=document.getElementById("btnCleanPresence");
+  if(btnClean) btnClean.onclick=async function(){
+    try{
+      var snap=await db.collection("presence").get();
+      var now=Date.now();
+      var batch=db.batch();
+      snap.docs.forEach(function(d){
+        var data=d.data();
+        if(!data.lastSeen||(now-data.lastSeen)>45000)batch.delete(d.ref);
+      });
+      await batch.commit();
+    }catch(e){alert("Error: "+e.message);}
+  };
+
   var bo=document.getElementById("btnOut");
   if(bo) bo.onclick=async function(){
     await removePresence();
@@ -952,7 +966,9 @@ async function loadDynamicSupervisors(){
 // ── Presence ───────────────────────────────────────────────
 async function registerPresence(name,role){
   try{
-    presenceId=presenceId||(Date.now().toString(36)+Math.random().toString(36).slice(2));
+    // Restore presenceId from sessionStorage if exists
+    if(!presenceId)presenceId=sessionStorage.getItem('presenceId');
+    if(!presenceId){presenceId=Date.now().toString(36)+Math.random().toString(36).slice(2);sessionStorage.setItem('presenceId',presenceId);}
     await db.collection("presence").doc(presenceId).set({
       name:name,role:role,
       loginTime:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}),
@@ -971,8 +987,12 @@ async function registerPresence(name,role){
 
 async function removePresence(){
   if(presenceInterval){clearInterval(presenceInterval);presenceInterval=null;}
+  // Try to get presenceId from sessionStorage if not in memory
+  if(!presenceId)presenceId=sessionStorage.getItem('presenceId');
   if(!presenceId)return;
-  try{await db.collection("presence").doc(presenceId).delete();presenceId=null;}catch(e){}
+  try{await db.collection("presence").doc(presenceId).delete();}catch(e){}
+  presenceId=null;
+  sessionStorage.removeItem('presenceId');
 }
 
 let unsubPresence=null;
@@ -982,7 +1002,7 @@ function listenPresence(){
     var users=[];var now=Date.now();
     snap.docs.forEach(function(d){
       var data=d.data();
-      if(data.lastSeen&&(now-data.lastSeen)<120000)users.push(data);
+      if(data.lastSeen&&(now-data.lastSeen)<45000)users.push(data);
     });
     users.sort(function(a,b){return b.lastSeen-a.lastSeen;});
     ss({onlineUsers:users});
