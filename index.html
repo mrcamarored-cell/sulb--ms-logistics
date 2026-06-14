@@ -208,7 +208,7 @@ function topbarW(){
   var modeTag=listMode==="closed"?
     '<span style="display:inline-block;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#6ee7b7;font-weight:700;margin-left:6px">&#128274; Closed List</span>':
     '<span style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#93c5fd;font-weight:700;margin-left:6px">&#128275; Open List</span>';
-  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);color:#93c5fd">&#128119; '+S.workerName+'</span>'+modeTag+'<span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company | ID: '+S.workerId+'</p></div><button class="blog" id="btnLogout">&#128682; Logout</button></div>';
+  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);color:#93c5fd">&#128119; '+S.workerName+'</span>'+modeTag+'<span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company | ID: '+S.workerId+'</p></div><div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="blog" id="btnLogout">&#128682; Logout</button></div></div>';
 }
 function topbarS(){
   var sn=S.supervisorName?' <span style="background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;color:#93c5fd;margin-left:8px">&#128203; '+S.supervisorName+'</span>':'';
@@ -522,6 +522,13 @@ function bind(){
     registerPresence(name+' ('+id+')','Worker');ss({workerStep:false,workerId:id,workerName:name,workerIdErr:"",submitted:false,rows:[er()],
       hdr:{sheetNo:"",date:fmtDate(new Date()),operator:name,startTime:"",endTime:""}});
   };
+  var btnRefresh=document.getElementById("btnRefresh");
+  if(btnRefresh) btnRefresh.onclick=function(){
+    loadStockFromDB();
+    if(S.role==="supervisor"||S.role==="admin"){load();}
+    draw();
+  };
+
   var bo=document.getElementById("btnOut");
   if(bo) bo.onclick=async function(){
     await removePresence();
@@ -771,7 +778,7 @@ function bind(){
           if(reservedBatches[batch]&&reservedBatches[batch].workerId!==S.workerId){S.rows[i].reserved=true;S.rows[i].reservedBy=reservedBatches[batch].workerName;}
           else if(!allBatchNos.has(batch)) reserveBatch(batch);
           if(listMode==="closed"){
-            if(stockData[batch]){var item=stockData[batch];S.rows[i].grade=item.grade||"";S.rows[i].length=String(item.length||"");S.rows[i].materialType=item.materialType||"";S.rows[i].locationFrom=item.storageLocation||"";S.rows[i].autoFilled=true;S.rows[i].notFound=false;}
+            if(stockData[batch]){var item=stockData[batch];S.rows[i].grade=item.grade||"";S.rows[i].length=String(item.length||"");S.rows[i].materialType=item.materialType||"";S.rows[i].locationFrom=item.storageLocation||"";S.rows[i].rollingSize=item.rollingSize||"";S.rows[i].quantity=String(item.availableStock||"");S.rows[i].autoFilled=true;S.rows[i].notFound=false;}
             else{S.rows[i].autoFilled=false;S.rows[i].notFound=true;}
           }
         }
@@ -1170,7 +1177,7 @@ function adminHTML(){
     '<div class="wrap">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
       '<div><p style="font-size:18px;font-weight:800;color:#1e3a8a;margin:0">Admin Panel</p><p style="font-size:12px;color:#4a6080;margin:0">System Administration</p></div>'+
-      '<button class="bs" id="btnOut" style="padding:8px 14px;font-size:12px">Sign Out</button>'+
+      '<div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="bs" id="btnOut" style="padding:8px 14px;font-size:12px">Sign Out</button></div>'+
     '</div>'+tabs+body+'</div>';
 }
 
