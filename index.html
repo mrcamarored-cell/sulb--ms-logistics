@@ -92,7 +92,7 @@ function fmtTime(d){return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"
 function fmtDate(d){return d.toISOString().slice(0,10);}
 function timeDiff(s,e){var diff=Math.floor((e-s)/1000);var h=Math.floor(diff/3600);var m=Math.floor((diff%3600)/60);var sc=diff%60;return(h>0?h+"h ":"")+m+"m "+sc+"s";}
 let allBatchNos=new Set(),startTime=null,stockData={},stockLastUpdate="",listMode="open",reservedBatches={},myReservations=[],searchQuery="";
-let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,roExpandedOrder:null};
+let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,roExpandedOrder:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
 let unsub=null,unsubReservations=null,unsubPresence=null;
 async function loadAllBatchNos(){try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){}}
 async function loadStockFromDB(){try{var snap=await db.collection("stock").get();stockData={};snap.docs.forEach(function(d){var data=d.data();if(data.batchNo)stockData[data.batchNo]=data;});var meta=await db.collection("settings").doc("stockMeta").get();stockLastUpdate=meta.exists?(meta.data().updatedAt||""):"";}catch(e){}}
@@ -161,7 +161,37 @@ function roWorkerHTML(){
   if(!li){roActiveLength=null;return roWorkerHTML();}
   var d3=(li.submittedPieces||[]).length,r3=li.requiredPcs,done3=d3>=r3;
   var sList=(li.submittedPieces||[]).map(function(p,pi){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f8fafc;border:1px solid rgba(30,58,138,0.1);border-radius:8px;margin-bottom:6px"><div><p style="margin:0;font-size:12px;font-weight:700;color:#1e3a8a">'+( p.batchNo||"--")+'</p><p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(p.heatNo||"")+'&nbsp;|&nbsp;Strand: '+(p.strand||"")+'&nbsp;|&nbsp;Qty: '+(p.quantity||"")+'</p></div><p style="margin:0;font-size:11px;color:#4a6080">'+p.time+'</p></div>';}).join('');
-  return topbarW()+'<div class="wrap"><div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><button id="btnRoBackLength" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Lengths</button><div><p style="font-size:14px;font-weight:800;color:#1e3a8a;margin:0">'+li.length+'m — '+li.grade+'</p><p style="font-size:11px;color:#4a6080;margin:0">Lot: '+roActiveLot+'</p></div></div><div style="background:'+(done3?'rgba(16,185,129,0.08)':'rgba(30,58,138,0.04)')+';border:2px solid '+(done3?'rgba(16,185,129,0.4)':'rgba(30,58,138,0.15)')+';border-radius:14px;padding:16px;margin-bottom:16px;text-align:center"><p style="font-size:36px;font-weight:900;color:'+(done3?'#059669':'#1e3a8a')+';margin:0">'+d3+' / '+r3+'</p><p style="font-size:13px;color:#4a6080;margin:4px 0 0">'+(done3?'&#9989; Complete!':Math.max(0,r3-d3)+' remaining')+'</p></div>'+(sList?'<div class="card"><div class="card-title">Submitted Pieces</div>'+sList+'</div>':'')+(done3?'<div class="info-green" style="text-align:center;padding:16px">&#9989; All pieces entered! Press Submit to save.</div><button class="bp" id="btnRoFinalSubmit" style="margin-top:12px">Submit to Supervisor &#10003;</button>':'<div class="card"><div class="card-title">Enter Piece Details</div><div class="sub"><div class="sub-title">Material Details</div><div class="grid3" style="margin-bottom:8px"><div><label class="lbl">Heat No.</label><input id="ro_heatNo" placeholder="e.g. 1264133" inputmode="numeric"/></div><div><label class="lbl">Strand</label><input id="ro_strand" placeholder="e.g. C01"/></div><div><label class="lbl">Batch No.</label><input id="ro_batchNo" readonly style="font-weight:700"/></div></div><div class="grid3"><div><label class="lbl">Grade</label><input id="ro_grade" value="'+li.grade+'" readonly/></div><div><label class="lbl">Length (m)</label><input id="ro_length" value="'+li.length+'" readonly/></div><div><label class="lbl">Quantity (MT)</label><input id="ro_qty" placeholder="e.g. 1"/></div></div></div><div class="sub"><div class="sub-title">Location</div><div class="grid2"><div><label class="lbl">From</label><input id="ro_locFrom" placeholder="e.g. H030"/></div><div><label class="lbl">To</label><input id="ro_locTo" value="Rolling Mill" readonly/></div></div></div><div><label class="lbl">Remarks <span style="color:#dc2626">*</span></label><select id="ro_remarks" style="background:#fff"><option value="">-- Select Remark --</option>'+remarksOptions.map(function(o2){return '<option value="'+o2+'">'+o2+'</option>';}).join('')+'</select></div><button class="bp" id="btnRoSubmitPiece" style="margin-top:12px">Submit Piece &#10003;</button></div>')+'</div>';
+  return topbarW()+'<div class="wrap"><div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><button id="btnRoBackLength" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Lengths</button><div><p style="font-size:14px;font-weight:800;color:#1e3a8a;margin:0">'+li.length+'m — '+li.grade+'</p><p style="font-size:11px;color:#4a6080;margin:0">Lot: '+roActiveLot+'</p></div></div><div style="background:'+(done3?'rgba(16,185,129,0.08)':'rgba(30,58,138,0.04)')+';border:2px solid '+(done3?'rgba(16,185,129,0.4)':'rgba(30,58,138,0.15)')+';border-radius:14px;padding:16px;margin-bottom:16px;text-align:center"><p style="font-size:36px;font-weight:900;color:'+(done3?'#059669':'#1e3a8a')+';margin:0">'+d3+' / '+r3+'</p><p style="font-size:13px;color:#4a6080;margin:4px 0 0">'+(done3?'&#9989; Complete!':Math.max(0,r3-d3)+' remaining')+'</p></div>'+(sList?'<div class="card"><div class="card-title">Submitted Pieces</div>'+sList+'</div>':'')+(done3?'<div class="info-green" style="text-align:center;padding:16px">&#9989; All pieces entered! Press Submit to save.</div><button class="bp" id="btnRoFinalSubmit" style="margin-top:12px">Submit to Supervisor &#10003;</button>':(function(){
+  var roStatus=S.roPieceStatus||{};
+  var statusMsg='';
+  if(roStatus.notFound) statusMsg='<div class="warn-yellow">&#10007; Batch No. <strong>'+roStatus.batch+'</strong> not found in stock.</div>';
+  else if(roStatus.mismatch) statusMsg='<div class="warn">&#9888; Mismatch! Stock has Grade: <strong>'+roStatus.stockGrade+'</strong> Length: <strong>'+roStatus.stockLength+'</strong> — Expected Grade: <strong>'+li.grade+'</strong> Length: <strong>'+li.length+'</strong></div>';
+  else if(roStatus.ok) statusMsg='<div class="info-green">&#10003; Piece verified! Grade: <strong>'+roStatus.stockGrade+'</strong> Length: <strong>'+roStatus.stockLength+'</strong> — Matches order.</div>';
+  return '<div class="card"><div class="card-title">Enter Piece Details</div>'+
+    '<div class="sub"><div class="sub-title">Material Details</div>'+
+    '<div class="grid3" style="margin-bottom:8px">'+
+      '<div><label class="lbl">Heat No.</label><input id="ro_heatNo" placeholder="e.g. 1264133" inputmode="numeric" value="'+(S.roHeatNo||'')+'"/></div>'+
+      '<div><label class="lbl">Strand</label><input id="ro_strand" placeholder="e.g. C01" value="'+(S.roStrand||'')+'"/></div>'+
+      '<div><label class="lbl">Batch No.</label><input id="ro_batchNo" readonly style="font-weight:700" value="'+(S.roBatchNo||'')+'"/></div>'+
+    '</div>'+
+    statusMsg+
+    '<div class="grid3" style="margin-top:8px">'+
+      '<div><label class="lbl">Grade</label><input id="ro_grade" value="'+(roStatus.ok?roStatus.stockGrade:li.grade)+'" readonly'+(roStatus.mismatch?' style="background:rgba(220,38,38,0.1);border-color:#dc2626"':'')+'/></div>'+
+      '<div><label class="lbl">Length (m)</label><input id="ro_length" value="'+(roStatus.ok?roStatus.stockLength:li.length)+'" readonly'+(roStatus.mismatch?' style="background:rgba(220,38,38,0.1);border-color:#dc2626"':'')+'/></div>'+
+      '<div><label class="lbl">Quantity (MT)</label><input id="ro_qty" placeholder="e.g. 1" value="'+(S.roQty||roStatus.stockQty||'')+'"/></div>'+
+    '</div></div>'+
+    '<div class="sub"><div class="sub-title">Location</div>'+
+    '<div class="grid2">'+
+      '<div><label class="lbl">From</label><input id="ro_locFrom" placeholder="e.g. H030" value="'+(S.roLocFrom||roStatus.stockLoc||'')+'"/></div>'+
+      '<div><label class="lbl">To</label><input id="ro_locTo" value="Rolling Mill" readonly/></div>'+
+    '</div></div>'+
+    '<div><label class="lbl">Remarks <span style="color:#dc2626">*</span></label>'+
+    '<select id="ro_remarks" style="background:#fff"><option value="">-- Select Remark --</option>'+
+    remarksOptions.map(function(o2){return '<option value="'+o2+'"'+(S.roRemarks===o2?' selected':'')+'>'+o2+'</option>';}).join('')+
+    '</select></div>'+
+    '<button class="bp" id="btnRoSubmitPiece" style="margin-top:12px"'+(roStatus.mismatch?' disabled style="opacity:0.5;margin-top:12px"':'')+'>Submit Piece &#10003;</button>'+
+    '</div>';
+})())+'</div>';
 }
 function supTabs(){return '<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap"><button id="tabReq" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="requests"?"linear-gradient(135deg,#1e3a8a,#3b82f6)":"#fff")+';color:'+(S.supTab==="requests"?"#fff":"#1e3a8a")+'">&#128203; Requests</button><button id="tabRO" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="rolling"?"linear-gradient(135deg,#d97706,#f59e0b)":"#fff")+';color:'+(S.supTab==="rolling"?"#fff":"#d97706")+'">&#128293; Rolling</button><button id="tabStock" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="stock"?"linear-gradient(135deg,#059669,#10b981)":"#fff")+';color:'+(S.supTab==="stock"?"#fff":"#059669")+'">&#128196; Stock</button><button id="tabSearch" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="search"?"linear-gradient(135deg,#7c3aed,#a78bfa)":"#fff")+';color:'+(S.supTab==="search"?"#fff":"#7c3aed")+'">&#128269; Search</button></div>';}
 function supHTML(){
@@ -183,29 +213,44 @@ function roSupHTML(){
   var ol=roOrders.length===0?'<div class="card" style="text-align:center;padding:30px;color:#4a6080"><div style="font-size:48px;margin-bottom:12px">&#128196;</div><p>No rolling orders yet</p></div>':roOrders.map(function(o){
     var lots=o.lots||[];var tp=lots.reduce(function(s,l){return s+(l.lengths||[]).reduce(function(s2,ln){return s2+ln.requiredPcs;},0);},0);var dp=lots.reduce(function(s,l){return s+(l.lengths||[]).reduce(function(s2,ln){return s2+(ln.submittedPieces||[]).length;},0);},0);var pct=tp>0?Math.round(dp/tp*100):0;
     var isExp=S.roExpandedOrder===o.id;
-    var det="";
-    if(isExp){det='<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(30,58,138,0.1)">'+lots.map(function(lot){return '<div style="margin-bottom:12px"><p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0 0 8px">&#128202; '+lot.id+'</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">'+(lot.lengths||[]).map(function(len){var ld=(len.submittedPieces||[]).length;var lr=len.requiredPcs;var ok=ld>=lr;return '<div style="background:'+(ok?'rgba(16,185,129,0.06)':'rgba(30,58,138,0.04)')+';border:1px solid '+(ok?'rgba(16,185,129,0.3)':'rgba(30,58,138,0.12)')+';border-radius:10px;padding:10px"><p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">'+len.length+' m</p><p style="font-size:11px;color:#4a6080;margin:3px 0">'+len.grade+'</p><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><span class="counter-badge '+(ok?'counter-done':ld>lr?'counter-over':'counter-ok')+'">'+ld+'/'+lr+'</span>'+(len.closed?'<button data-ro-reopen="'+o.id+'" data-ro-lot="'+lot.id+'" data-ro-len="'+len.key+'" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:5px;padding:3px 8px;color:#059669;font-size:10px;font-weight:700;cursor:pointer">&#128275; Open</button>':'<button data-ro-close="'+o.id+'" data-ro-lot="'+lot.id+'" data-ro-len="'+len.key+'" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.2);border-radius:5px;padding:3px 8px;color:#dc2626;font-size:10px;font-weight:700;cursor:pointer">&#128274; Close</button>')+'</div>'+((len.submittedPieces||[]).length>0?'<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(30,58,138,0.08)">'+len.submittedPieces.map(function(p,pi){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><p style="font-size:10px;color:#1e3a8a;margin:0;font-weight:600">'+(p.batchNo||"--")+'</p><button data-ro-rm-order="'+o.id+'" data-ro-rm-lot="'+lot.id+'" data-ro-rm-len="'+len.key+'" data-ro-rm-pi="'+pi+'" style="background:rgba(220,38,38,0.1);border:none;border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#10005;</button></div>';}).join('')+'</div>':'')+'</div>';}).join('')+'</div></div>';}).join('')+'<div style="display:flex;gap:8px;margin-top:12px"><button data-ro-delete="'+o.id+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer">&#128465; Delete Order</button></div></div>';}
+    var det='';
+    if(isExp){det='<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(30,58,138,0.1)">'+lots.map(function(lot){return '<div style="margin-bottom:12px"><p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0 0 8px">&#128202; '+lot.id+'</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">'+(lot.lengths||[]).map(function(len){var ld=(len.submittedPieces||[]).length;var lr=len.requiredPcs;var ok=ld>=lr;return '<div style="background:'+(ok?'rgba(16,185,129,0.06)':'rgba(30,58,138,0.04)')+';border:1px solid '+(ok?'rgba(16,185,129,0.3)':'rgba(30,58,138,0.12)')+';border-radius:10px;padding:10px"><p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">'+len.length+'m</p><p style="font-size:11px;color:#4a6080;margin:3px 0">'+len.grade+'</p><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><span class="counter-badge '+(ok?'counter-done':ld>lr?'counter-over':'counter-ok')+'">'+ld+'/'+lr+'</span>'+(len.closed?'<button data-ro-reopen="'+o.id+'" data-ro-lot="'+lot.id+'" data-ro-len="'+len.key+'" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:5px;padding:3px 8px;color:#059669;font-size:10px;font-weight:700;cursor:pointer">&#128275; Open</button>':'<button data-ro-close="'+o.id+'" data-ro-lot="'+lot.id+'" data-ro-len="'+len.key+'" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.2);border-radius:5px;padding:3px 8px;color:#dc2626;font-size:10px;font-weight:700;cursor:pointer">&#128274; Close</button>')+'</div>'+((len.submittedPieces||[]).length>0?'<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(30,58,138,0.08)">'+len.submittedPieces.map(function(p,pi){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><p style="font-size:10px;color:#1e3a8a;margin:0;font-weight:600">'+(p.batchNo||'--')+'</p><button data-ro-rm-order="'+o.id+'" data-ro-rm-lot="'+lot.id+'" data-ro-rm-len="'+len.key+'" data-ro-rm-pi="'+pi+'" style="background:rgba(220,38,38,0.1);border:none;border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#10005;</button></div>';}).join('')+'</div>':'')+'</div>';}).join('')+'</div></div>';}).join('')+'<div style="margin-top:12px"><button data-ro-delete="'+o.id+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer">&#128465; Delete Order</button></div></div>';}
     return '<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div><p style="font-weight:800;color:#1e3a8a;font-size:14px;margin:0">&#128196; '+o.finishRollingSize+'</p><p style="font-size:11px;color:#4a6080;margin:4px 0">'+o.date+' | By: '+o.createdBy+'</p><p style="font-size:11px;color:#4a6080;margin:2px 0">Assigned: '+(o.assignedToAll?'All Workers':(o.assignedWorkerName||o.assignedWorkerId||'--'))+'</p></div><div style="display:flex;align-items:center;gap:8px"><div style="text-align:right"><span class="counter-badge '+(pct>=100?'counter-done':'counter-ok')+'">'+dp+'/'+tp+'</span><div style="margin-top:4px;background:#e8edf2;border-radius:10px;height:5px;width:80px;margin-left:auto"><div style="background:'+(pct>=100?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+Math.min(pct,100)+'%"></div></div></div><button data-ro-expand="'+o.id+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:6px 12px;color:#1e3a8a;font-weight:700;font-size:12px;cursor:pointer">'+(isExp?'&#9650; Hide':'&#9660; Details')+'</button></div></div>'+det+'</div>';
   }).join('');
-  return '<div class="card"><div class="card-title">&#128293; Create Rolling Order</div>'+
-    '<div style="margin-bottom:12px"><label class="lbl">Finish Rolling Size</label><input id="roNewSize" placeholder="e.g. UB406X178_54.1"/></div>'+
-    '<div style="margin-bottom:12px"><label class="lbl">Assign to Worker</label><select id="roWorkerAssign" style="background:#fff"><option value="all">All Workers</option>'+wo+'</select></div>'+
-    '<div id="roLotsContainer">'+
-      '<div class="ro-manual-lot" data-lot-idx="0">'+
-        '<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:12px;margin-bottom:10px">'+
-        '<p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0 0 10px">&#128202; Rolling Lot #1</p>'+
-        '<div style="margin-bottom:8px"><label class="lbl">Rolling Lot ID</label><input class="ro-lot-id" placeholder="e.g. 101040123172"/></div>'+
-        '<div class="grid3">'+
-          '<div><label class="lbl">Grade</label><input class="ro-lot-grade" placeholder="e.g. S355JR"/></div>'+
-          '<div><label class="lbl">Length (m)</label><input class="ro-lot-length" placeholder="e.g. 12.0" inputmode="decimal"/></div>'+
-          '<div><label class="lbl">Required Pcs</label><input class="ro-lot-pcs" placeholder="e.g. 6" inputmode="numeric"/></div>'+
-        '</div>'+
-        '</div>'+
-      '</div>'+
-    '</div>'+
-    '<button id="btnRoAddLot" style="background:rgba(59,130,246,0.06);border:1px dashed rgba(59,130,246,0.4);border-radius:10px;padding:10px;color:#3b82f6;font-weight:600;font-size:13px;width:100%;margin-bottom:12px">+ Add Another Lot</button>'+
+  var form='<div class="card"><div class="card-title">&#128293; Create Rolling Order</div>'+
+    '<div style="margin-bottom:14px"><label class="lbl">Assign to Worker</label>'+
+    '<select id="roWorkerAssign" style="background:#fff"><option value="all">All Workers</option>'+wo+'</select></div>'+
+    '<div id="roSectionsContainer">'+roSectionHTML(0)+'</div>'+
+    '<button id="btnRoAddSection" style="background:rgba(59,130,246,0.06);border:1px dashed rgba(59,130,246,0.4);border-radius:10px;padding:10px;color:#3b82f6;font-weight:700;font-size:13px;width:100%;margin-bottom:12px">+ Add Section</button>'+
     '<button class="bp" id="btnRoSaveManual">&#10003; Save Rolling Order</button>'+
-    '</div>'+ol;
+    '</div>';
+  return form+ol;
+}
+function roSectionHTML(sIdx){
+  return '<div class="ro-section" data-sec-idx="'+sIdx+'" style="background:rgba(30,58,138,0.03);border:2px solid rgba(30,58,138,0.15);border-radius:12px;padding:14px;margin-bottom:12px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+    '<p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">&#128196; Section #'+(sIdx+1)+'</p>'+
+    (sIdx>0?'<button class="ro-remove-section" style="background:rgba(220,38,38,0.1);border:none;border-radius:6px;padding:4px 10px;color:#dc2626;font-size:12px;cursor:pointer">&#10005; Remove</button>':'')+
+    '</div>'+
+    '<div style="margin-bottom:12px"><label class="lbl">Finish Rolling Size</label>'+
+    '<input class="ro-sec-size" placeholder="e.g. UB406X178_54.1"/></div>'+
+    '<div class="ro-lots-wrap">'+roLotHTML(0)+'</div>'+
+    '<button class="ro-add-lot" style="background:rgba(16,185,129,0.06);border:1px dashed rgba(16,185,129,0.4);border-radius:8px;padding:8px;color:#059669;font-weight:600;font-size:12px;width:100%;margin-top:6px">+ Add Lot</button>'+
+    '</div>';
+}
+function roLotHTML(lIdx){
+  return '<div class="ro-lot" style="background:#fff;border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:12px;margin-bottom:8px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+    '<p style="font-size:11px;font-weight:700;color:#4a6080;margin:0">&#128202; Lot #'+(lIdx+1)+'</p>'+
+    (lIdx>0?'<button class="ro-remove-lot" style="background:rgba(220,38,38,0.08);border:none;border-radius:5px;padding:3px 8px;color:#dc2626;font-size:11px;cursor:pointer">&#10005;</button>':'')+
+    '</div>'+
+    '<div style="margin-bottom:8px"><label class="lbl">Rolling Lot ID</label>'+
+    '<input class="ro-lot-id" placeholder="e.g. 101040123172"/></div>'+
+    '<div class="grid3">'+
+    '<div><label class="lbl">Grade</label><input class="ro-lot-grade" placeholder="e.g. S355JR"/></div>'+
+    '<div><label class="lbl">Length (m)</label><input class="ro-lot-length" placeholder="e.g. 12.0" inputmode="decimal"/></div>'+
+    '<div><label class="lbl">Required Pcs</label><input class="ro-lot-pcs" placeholder="e.g. 6" inputmode="numeric"/></div>'+
+    '</div></div>';
 }
 function roConfirmHTML(){
   if(!roPendingData)return'';
@@ -250,51 +295,121 @@ function bind(){
   var btnRoBack=document.getElementById("btnRoBack");if(btnRoBack) btnRoBack.onclick=function(){ss({roWorkerScreen:false});};
   var btnRoBackOrder=document.getElementById("btnRoBackOrder");if(btnRoBackOrder) btnRoBackOrder.onclick=function(){roActiveOrder=null;roActiveLot=null;roActiveLength=null;draw();};
   var btnRoBackLot=document.getElementById("btnRoBackLot");if(btnRoBackLot) btnRoBackLot.onclick=function(){roActiveLot=null;roActiveLength=null;draw();};
-  var btnRoBackLength=document.getElementById("btnRoBackLength");if(btnRoBackLength) btnRoBackLength.onclick=function(){roActiveLength=null;draw();};
+  var btnRoBackLength=document.getElementById("btnRoBackLength");if(btnRoBackLength) btnRoBackLength.onclick=function(){roActiveLength=null;S.roPieceStatus={};S.roHeatNo='';S.roStrand='';S.roBatchNo='';draw();};
   document.querySelectorAll("[data-ro-order]").forEach(function(b){b.onclick=function(){roActiveOrder=b.dataset.roOrder;roActiveLot=null;roActiveLength=null;draw();};});
   document.querySelectorAll("[data-ro-lot]").forEach(function(b){if(!b.dataset.roOrder)b.onclick=function(){roActiveLot=b.dataset.roLot;roActiveLength=null;draw();};});
   document.querySelectorAll("[data-ro-length]").forEach(function(b){b.onclick=function(){roActiveLength=b.dataset.roLength;draw();};});
-  var roH=document.getElementById("ro_heatNo");var roS=document.getElementById("ro_strand");
-  function updRoBatch(){var h=(roH?roH.value:"").trim();var s2=(roS?roS.value:"").trim();var bEl=document.getElementById("ro_batchNo");if(bEl)bEl.value=h+s2;}
-  if(roH)roH.addEventListener("input",updRoBatch);if(roS)roS.addEventListener("input",updRoBatch);
+  var roH=document.getElementById("ro_heatNo");var roSt=document.getElementById("ro_strand");
+  function updRoBatch(){
+    var h=(roH?roH.value:"").trim();
+    var st=(roSt?roSt.value:"").trim();
+    var batch=h+st;
+    var bEl=document.getElementById("ro_batchNo");
+    if(bEl)bEl.value=batch;
+    S.roHeatNo=h;S.roStrand=st;S.roBatchNo=batch;
+    // ابحث في stock عند اكتمال الـ batch
+    if(batch.length>5){
+      var order=roOrders.find(function(o){return o.id===roActiveOrder;});
+      var lot=order?order.lots.find(function(l){return l.id===roActiveLot;}):null;
+      var li=lot?lot.lengths.find(function(l){return l.key===roActiveLength;}):null;
+      if(!li){return;}
+      if(stockData[batch]){
+        var item=stockData[batch];
+        var stockGrade=String(item.grade||"").trim();
+        var stockLength=parseFloat(item.length||0);
+        var reqGrade=String(li.grade||"").trim();
+        var reqLength=parseFloat(li.length||0);
+        var gradeMatch=stockGrade.toUpperCase()===reqGrade.toUpperCase();
+        var lengthMatch=Math.abs(stockLength-reqLength)<0.1;
+        if(gradeMatch&&lengthMatch){
+          S.roPieceStatus={ok:true,batch:batch,stockGrade:stockGrade,stockLength:stockLength,stockQty:String(item.availableStock||""),stockLoc:item.storageLocation||""};
+        } else {
+          S.roPieceStatus={mismatch:true,batch:batch,stockGrade:stockGrade,stockLength:stockLength,reqGrade:reqGrade,reqLength:reqLength};
+        }
+      } else {
+        S.roPieceStatus={notFound:true,batch:batch};
+      }
+      draw();
+    } else {
+      S.roPieceStatus={};
+      draw();
+    }
+  }
+  if(roH)roH.addEventListener("input",updRoBatch);
+  if(roSt)roSt.addEventListener("input",updRoBatch);
   var btnRoSub=document.getElementById("btnRoSubmitPiece");
   if(btnRoSub) btnRoSub.onclick=async function(){
-    var hn=(document.getElementById("ro_heatNo")||{}).value||"";var strand=(document.getElementById("ro_strand")||{}).value||"";var qty=(document.getElementById("ro_qty")||{}).value||"";var locFrom=(document.getElementById("ro_locFrom")||{}).value||"";var remarks=(document.getElementById("ro_remarks")||{}).value||"";
-    if(!hn.trim()){alert("Please enter Heat No.");return;}if(!remarks){alert("Please select a Remark.");return;}
-    var order=roOrders.find(function(o){return o.id===roActiveOrder;});var lot=order?order.lots.find(function(l){return l.id===roActiveLot;}):null;var li=lot?lot.lengths.find(function(l){return l.key===roActiveLength;}):null;if(!li){alert("Length not found.");return;}
-    var newP={heatNo:hn.trim(),strand:strand.trim(),batchNo:hn.trim()+strand.trim(),grade:li.grade,length:li.length,quantity:qty,locationFrom:locFrom,locationTo:"Rolling Mill",remarks:remarks,workerName:S.workerName,workerId:S.workerId,time:fmtTime(new Date()),date:fmtDate(new Date())};
-    await updateRollingOrderPieces(roActiveOrder,roActiveLot,roActiveLength,(li.submittedPieces||[]).concat([newP]));draw();
+    var hn=(document.getElementById("ro_heatNo")||{}).value||"";
+    var strand=(document.getElementById("ro_strand")||{}).value||"";
+    var qty=(document.getElementById("ro_qty")||{}).value||"";
+    var locFrom=(document.getElementById("ro_locFrom")||{}).value||"";
+    var remarks=(document.getElementById("ro_remarks")||{}).value||"";
+    if(!hn.trim()){alert("Please enter Heat No.");return;}
+    if(!remarks){alert("Please select a Remark.");return;}
+    var status=S.roPieceStatus||{};
+    if(status.mismatch){alert("Cannot submit — piece does not match the required Grade/Length.");return;}
+    if(status.notFound){if(!confirm("Batch No. not found in stock. Submit anyway?")){return;}}
+    var order=roOrders.find(function(o){return o.id===roActiveOrder;});
+    var lot=order?order.lots.find(function(l){return l.id===roActiveLot;}):null;
+    var li=lot?lot.lengths.find(function(l){return l.key===roActiveLength;}):null;
+    if(!li){alert("Length not found.");return;}
+    var newP={
+      heatNo:hn.trim(),strand:strand.trim(),batchNo:hn.trim()+strand.trim(),
+      grade:status.ok?status.stockGrade:li.grade,
+      length:status.ok?String(status.stockLength):String(li.length),
+      quantity:qty,locationFrom:locFrom,locationTo:"Rolling Mill",
+      remarks:remarks,workerName:S.workerName,workerId:S.workerId,
+      time:fmtTime(new Date()),date:fmtDate(new Date())
+    };
+    // امسح الحالة لإدخال قطعة جديدة
+    S.roPieceStatus={};S.roHeatNo="";S.roStrand="";S.roBatchNo="";S.roQty="";S.roLocFrom="";S.roRemarks="";
+    await updateRollingOrderPieces(roActiveOrder,roActiveLot,roActiveLength,(li.submittedPieces||[]).concat([newP]));
+    draw();
   };
 
   // Manual rolling order save
   var btnRoSaveManual=document.getElementById("btnRoSaveManual");
   if(btnRoSaveManual) btnRoSaveManual.onclick=async function(){
-    var size=(document.getElementById("roNewSize")||{}).value.trim();
-    if(!size){alert("Please enter Finish Rolling Size.");return;}
+    var sections=document.querySelectorAll(".ro-manual-lot");
     var lotIds=document.querySelectorAll(".ro-lot-id");
     var grades=document.querySelectorAll(".ro-lot-grade");
     var lengths=document.querySelectorAll(".ro-lot-length");
     var pcss=document.querySelectorAll(".ro-lot-pcs");
-    var lots=[];
-    for(var i=0;i<lotIds.length;i++){
+    var sizes=document.querySelectorAll(".ro-lot-size");
+    var waEl=document.getElementById("roWorkerAssign");
+    var assignedTo=waEl?waEl.value:"all";
+    var dw2=S.dynamicWorkers||WORKERS;
+    var assignedWorkerId=assignedTo!=="all"?assignedTo:null;
+    var assignedWorkerName=assignedTo!=="all"?(dw2[assignedTo]||assignedTo):null;
+    if(!sections.length){alert("Please add at least one section.");return;}
+    // نجمع كل section كـ rolling order منفصل
+    var orders=[];
+    for(var i=0;i<sections.length;i++){
+      var sz=sizes[i]?sizes[i].value.trim():"";
       var lid=lotIds[i]?lotIds[i].value.trim():"";
       var gr=grades[i]?grades[i].value.trim():"";
       var ln=parseFloat(lengths[i]?lengths[i].value:0)||0;
       var pc=parseInt(pcss[i]?pcss[i].value:0)||0;
-      if(lid&&gr&&ln&&pc)lots.push({id:lid,grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[]});
+      if(!sz){alert("Section #"+(i+1)+": Please enter Finish Rolling Size.");return;}
+      if(!lid||!gr||!ln||!pc){alert("Section #"+(i+1)+": Please fill all fields.");return;}
+      // ابحث إذا كان نفس الـ size موجود
+      var existing=orders.find(function(o){return o.finishRollingSize===sz;});
+      if(existing){
+        // أضف lot لنفس الـ order
+        var existingLot=existing.lots.find(function(l){return l.id===lid;});
+        if(existingLot){
+          existingLot.lengths.push({grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[],closed:false});
+        } else {
+          existing.lots.push({id:lid,lengths:[{grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[],closed:false}]});
+        }
+      } else {
+        orders.push({finishRollingSize:sz,lots:[{id:lid,lengths:[{grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[],closed:false}]}]});
+      }
     }
-    if(!lots.length){alert("Please fill at least one lot with all fields.");return;}
-    var grouped={};
-    lots.forEach(function(l){
-      if(!grouped[l.id])grouped[l.id]={id:l.id,lengths:[]};
-      grouped[l.id].lengths.push({grade:l.grade,length:l.length,requiredPcs:l.requiredPcs,key:l.key,submittedPieces:[],closed:false});
-    });
-    var finalLots=Object.values(grouped);
-    var waEl=document.getElementById("roWorkerAssign");
-    var assignedTo=waEl?waEl.value:"all";
-    var dw2=S.dynamicWorkers||WORKERS;
-    await saveRollingOrder({finishRollingSize:size,lots:finalLots,assignedToAll:assignedTo==="all",assignedWorkerId:assignedTo!=="all"?assignedTo:null,assignedWorkerName:assignedTo!=="all"?(dw2[assignedTo]||assignedTo):null});
-    alert("\u2705 Rolling Order saved!");draw();
+    for(var j=0;j<orders.length;j++){
+      await saveRollingOrder(Object.assign(orders[j],{assignedToAll:assignedTo==="all",assignedWorkerId:assignedWorkerId,assignedWorkerName:assignedWorkerName}));
+    }
+    alert("\u2705 "+orders.length+" Rolling Order(s) saved!");draw();
   };
   // Add lot row
   var btnRoAddLot=document.getElementById("btnRoAddLot");
