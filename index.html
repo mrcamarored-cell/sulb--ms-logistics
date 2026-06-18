@@ -15,7 +15,6 @@ input::placeholder{color:#9ab}
 input[readonly]{background:rgba(30,58,138,0.06);border-color:rgba(30,58,138,0.3);color:#1e3a8a;font-weight:700}
 button{cursor:pointer}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .live{display:inline-block;background:rgba(0,200,100,0.15);border:1px solid rgba(0,200,100,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#059669;font-weight:700;margin-left:8px;animation:pulse 2s infinite}
 .topbar{background:#1e3a8a;padding:12px 20px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(30,58,138,0.3)}
 .logo-img{height:38px;object-fit:contain}
@@ -60,1164 +59,280 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 .mode-closed{background:#fff;border-color:rgba(16,185,129,0.3);color:#059669}
 .mode-closed.active{background:linear-gradient(135deg,#059669,#10b981);color:#fff;border-color:transparent}
 .search-box{background:#fff;border:2px solid rgba(30,58,138,0.3);border-radius:10px;padding:10px 14px;font-size:14px;color:#1e3a8a;width:100%;outline:none;box-shadow:0 2px 8px rgba(30,58,138,0.1)}
-.search-box:focus{border-color:#3b82f6}
 .search-result{background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.15);border-radius:10px;padding:14px;margin-top:10px}
-.piece-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#fff;border:1px solid rgba(30,58,138,0.1);border-radius:8px;margin-bottom:6px}
+.ro-lot-btn{background:#fff;border:2px solid rgba(30,58,138,0.2);border-radius:12px;padding:14px 16px;text-align:left;width:100%;margin-bottom:10px;cursor:pointer}
+.ro-lot-btn.complete{border-color:rgba(16,185,129,0.5);background:rgba(16,185,129,0.04)}
+.ro-length-btn{background:#fff;border:2px solid rgba(30,58,138,0.15);border-radius:10px;padding:12px;text-align:center;cursor:pointer;width:100%}
+.ro-length-btn.complete{border-color:rgba(16,185,129,0.5);background:rgba(16,185,129,0.06)}
+.ro-length-btn.closed{border-color:rgba(220,38,38,0.3);background:rgba(220,38,38,0.04);opacity:0.7;cursor:not-allowed}
+.counter-badge{display:inline-block;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:800}
+.counter-ok{background:rgba(30,58,138,0.1);color:#1e3a8a}
+.counter-done{background:rgba(16,185,129,0.15);color:#059669}
+.counter-over{background:rgba(220,38,38,0.12);color:#dc2626}
+.ro-task-banner{background:linear-gradient(135deg,rgba(245,158,11,0.12),rgba(251,191,36,0.08));border:2px solid rgba(245,158,11,0.35);border-radius:14px;padding:14px 16px;margin-bottom:16px}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-firebase.initializeApp({
-  apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",
-  authDomain:"delivery-note-sheet.firebaseapp.com",
-  projectId:"delivery-note-sheet",
-  storageBucket:"delivery-note-sheet.firebasestorage.app",
-  messagingSenderId:"150874743555",
-  appId:"1:150874743555:web:17b88acc92636639dd3f36"
-});
+firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
-const WORKERS={
-  "001":"Jahanjeer","002":"Sadiq","003":"Fahad","004":"Jahedeedul",
-  "005":"Basheer","006":"Shamon","007":"Hanif","008":"Ball",
-  "009":"Arif","010":"Hakeem","011":"Ali Aflatoon","012":"Hisham",
-  "013":"Jasim","014":"Yousuf","015":"Elias","016":"Saeed Alhayki","017":"Shaheen"
-};
+const WORKERS={"001":"Jahanjeer","002":"Sadiq","003":"Fahad","004":"Jahedeedul","005":"Basheer","006":"Shamon","007":"Hanif","008":"Ball","009":"Arif","010":"Hakeem","011":"Ali Aflatoon","012":"Hisham","013":"Jasim","014":"Yousuf","015":"Elias","016":"Saeed Alhayki","017":"Shaheen"};
 let remarksOptions=["Transfer","Return","Scrap","Inventory","Other"];
 let SUPERVISORS={"S01":"Supervisor 1","S02":"Supervisor 2"};
 let dynamicSupervisors=Object.assign({},SUPERVISORS);
-let presenceInterval=null;
-let presenceId=null;
-let columnMapping=null;
-let pendingUploadRows=[];
-let pendingFileColumns=[];
-let showMappingScreen=false;
-
-const FIELD_DEFS=[
-  {key:"batchNo",label:"Batch No.",keywords:["batch"]},
-  {key:"heatNo",label:"Heat No.",keywords:["heat","ccm heat"]},
-  {key:"rollingSize",label:"Rolling Size",keywords:["rolling","size","rolling size"]},
-  {key:"grade",label:"Grade",keywords:["grade","ccm grade"]},
-  {key:"length",label:"Length",keywords:["length","ccm length"]},
-  {key:"materialType",label:"Material Type",keywords:["product type","material","ccm product"]},
-  {key:"availableStock",label:"Available Stock",keywords:["available","avail","stock"]},
-  {key:"storageLocation",label:"Location From",keywords:["storage location","storage loc","location"]},
-  {key:"storageBin",label:"Storage Bin",keywords:["bin","storage bin"]}
-];
-
-function autoDetectColumns(cols){
-  var mapping={};
-  FIELD_DEFS.forEach(function(fd){
-    var found=cols.find(function(c){var cl=c.toLowerCase();return fd.keywords.some(function(k){return cl.includes(k);});});
-    mapping[fd.key]=found||"";
-  });
-  return mapping;
-}
-
+let presenceInterval=null,presenceId=null,columnMapping=null,pendingUploadRows=[],pendingFileColumns=[],showMappingScreen=false;
+let roOrders=[],roActiveOrder=null,roActiveLot=null,roActiveLength=null,roAiLoading=false,roPendingData=null,unsubRO=null;
+const FIELD_DEFS=[{key:"batchNo",label:"Batch No.",keywords:["batch"]},{key:"heatNo",label:"Heat No.",keywords:["heat","ccm heat"]},{key:"rollingSize",label:"Rolling Size",keywords:["rolling","size","rolling size"]},{key:"grade",label:"Grade",keywords:["grade","ccm grade"]},{key:"length",label:"Length",keywords:["length","ccm length"]},{key:"materialType",label:"Material Type",keywords:["product type","material","ccm product"]},{key:"availableStock",label:"Available Stock",keywords:["available","avail","stock"]},{key:"storageLocation",label:"Location From",keywords:["storage location","storage loc","location"]},{key:"storageBin",label:"Storage Bin",keywords:["bin","storage bin"]}];
+function autoDetectColumns(cols){var m={};FIELD_DEFS.forEach(function(fd){var f=cols.find(function(c){var cl=c.toLowerCase();return fd.keywords.some(function(k){return cl.includes(k);});});m[fd.key]=f||"";});return m;}
 function er(){return{heatNo:"",strand:"",batchNo:"",rollingSize:"",materialType:"",rollingLot:"",grade:"",length:"",quantity:"",locationFrom:"",locationTo:"",remarks:"",autoFilled:false,notFound:false,alreadySubmitted:false,reserved:false,reservedBy:""};}
 function fmtTime(d){return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
 function fmtDate(d){return d.toISOString().slice(0,10);}
 function timeDiff(s,e){var diff=Math.floor((e-s)/1000);var h=Math.floor(diff/3600);var m=Math.floor((diff%3600)/60);var sc=diff%60;return(h>0?h+"h ":"")+m+"m "+sc+"s";}
-let allBatchNos=new Set();
-let startTime=null;
-let stockData={};
-let stockLastUpdate="";
-let listMode="open";
-let reservedBatches={};
-let myReservations=[];
-let searchQuery="";
-let S={
-  role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],
-  submitted:false,saving:false,timeTaken:"",
-  sessions:[],loading:false,delC:null,
-  hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},
-  rows:[er()],logoutMsg:false,supTab:"requests"
-};
-let unsub=null;
-let unsubReservations=null;
-
-async function loadAllBatchNos(){
-  try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){console.log(e);}
-}
-async function loadStockFromDB(){
-  try{
-    var snap=await db.collection("stock").get();
-    stockData={};
-    snap.docs.forEach(function(d){var data=d.data();if(data.batchNo)stockData[data.batchNo]=data;});
-    var meta=await db.collection("settings").doc("stockMeta").get();
-    stockLastUpdate=meta.exists?(meta.data().updatedAt||""):"";
-  }catch(e){console.log(e);}
-}
-async function loadListMode(){
-  try{const doc=await db.collection("settings").doc("listMode").get();if(doc.exists)listMode=doc.data().mode||"open";}catch(e){console.log(e);}
-}
-function listenReservations(){
-  if(unsubReservations)unsubReservations();
-  unsubReservations=db.collection("reservations").onSnapshot(function(snap){
-    reservedBatches={};
-    snap.docs.forEach(function(d){
-      var data=d.data();
-      var age=(Date.now()-(data.ts||0))/1000;
-      if(age<300)reservedBatches[d.id]={workerName:data.workerName,workerId:data.workerId};
-    });
-  });
-}
-async function reserveBatch(batch){
-  if(!batch)return;
-  try{
-    await db.collection("reservations").doc(batch).set({workerName:S.workerName,workerId:S.workerId,ts:Date.now(),date:fmtDate(new Date())});
-    if(!myReservations.includes(batch))myReservations.push(batch);
-  }catch(e){console.log(e);}
-}
-async function releaseMyReservations(){
-  for(var i=0;i<myReservations.length;i++){try{await db.collection("reservations").doc(myReservations[i]).delete();}catch(e){}}
-  myReservations=[];
-}
+let allBatchNos=new Set(),startTime=null,stockData={},stockLastUpdate="",listMode="open",reservedBatches={},myReservations=[],searchQuery="";
+let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,roExpandedOrder:null};
+let unsub=null,unsubReservations=null,unsubPresence=null;
+async function loadAllBatchNos(){try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){}}
+async function loadStockFromDB(){try{var snap=await db.collection("stock").get();stockData={};snap.docs.forEach(function(d){var data=d.data();if(data.batchNo)stockData[data.batchNo]=data;});var meta=await db.collection("settings").doc("stockMeta").get();stockLastUpdate=meta.exists?(meta.data().updatedAt||""):"";}catch(e){}}
+async function loadListMode(){try{const doc=await db.collection("settings").doc("listMode").get();if(doc.exists)listMode=doc.data().mode||"open";}catch(e){}}
+function listenReservations(){if(unsubReservations)unsubReservations();unsubReservations=db.collection("reservations").onSnapshot(function(snap){reservedBatches={};snap.docs.forEach(function(d){var data=d.data();var age=(Date.now()-(data.ts||0))/1000;if(age<300)reservedBatches[d.id]={workerName:data.workerName,workerId:data.workerId};});});}
+async function reserveBatch(batch){if(!batch)return;try{await db.collection("reservations").doc(batch).set({workerName:S.workerName,workerId:S.workerId,ts:Date.now(),date:fmtDate(new Date())});if(!myReservations.includes(batch))myReservations.push(batch);}catch(e){}}
+async function releaseMyReservations(){for(var i=0;i<myReservations.length;i++){try{await db.collection("reservations").doc(myReservations[i]).delete();}catch(e){}}myReservations=[];}
+function listenRollingOrders(){if(unsubRO)unsubRO();unsubRO=db.collection("rollingOrders").orderBy("createdAt","desc").onSnapshot(function(snap){roOrders=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});draw();});}
+async function saveRollingOrder(orderData){try{var ref=await db.collection("rollingOrders").add(Object.assign({},orderData,{createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:S.supervisorName||S.uname,date:fmtDate(new Date()),status:"active"}));return ref.id;}catch(e){alert("Error saving order: "+e.message);return null;}}
+async function updateRollingOrderPieces(orderId,lotId,lengthKey,newPieces){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=newPieces;li.closed=(newPieces.length>=li.requiredPcs);await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
+async function toggleLengthClosed(orderId,lotId,lengthKey,forceOpen){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.closed=forceOpen?false:!li.closed;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
+async function removePieceFromRO(orderId,lotId,lengthKey,pieceIdx){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=(li.submittedPieces||[]).filter(function(_,i){return i!==pieceIdx;});if(li.submittedPieces.length<li.requiredPcs)li.closed=false;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
+async function extractRollingOrderFromPDF(base64Data){roAiLoading=true;draw();try{var resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64Data}},{type:"text",text:'Extract rolling order data from this PDF. Return ONLY valid JSON no markdown no backticks. Format: {"finishRollingSize":"UB406X178_54.1","lots":[{"id":"101040123188","grade":"S355JR","length":12.0,"requiredPcs":6,"key":"S355JR_12.0"}]} For each row: id=Rolling Lot column, grade=finished Grade, length=finished Length, requiredPcs=Sch.Pcs (or Ord.Pcs). key=grade+"_"+length. Skip rows where Pcs=0. Include all sections.'}]}]})});var data=await resp.json();var text=(data.content||[]).map(function(c){return c.text||"";}).join("").replace(/```json|```/g,"").trim();var parsed=JSON.parse(text);roAiLoading=false;return parsed;}catch(e){roAiLoading=false;alert("AI extraction failed: "+e.message);return null;}}
 function ss(u){Object.assign(S,u);draw();}
-function draw(){
-  var active=document.activeElement;
-  var activeId=active?active.id:null;
-  var activeDataR=active?active.dataset.r:null;
-  var activeDataF=active?active.dataset.f:null;
-  var activeCaret=active&&active.selectionStart!=null?active.selectionStart:null;
-  document.getElementById("app").innerHTML=html();
-  bind();
-  if(activeId){var el=document.getElementById(activeId);if(el){el.focus();if(activeCaret!=null){try{el.setSelectionRange(activeCaret,activeCaret);}catch(e){}}}}
-  else if(activeDataR!=null&&activeDataF!=null){
-    var inputs=document.querySelectorAll(".ri");
-    for(var i=0;i<inputs.length;i++){if(inputs[i].dataset.r===activeDataR&&inputs[i].dataset.f===activeDataF){inputs[i].focus();if(activeCaret!=null){try{inputs[i].setSelectionRange(activeCaret,activeCaret);}catch(e){}}break;}}
-  }
-}
-function html(){
-  if(S.logoutMsg)return logoutHTML();
-  if(!S.role)return loginHTML();
-  if(S.role==="worker"&&S.workerStep)return workerIdHTML();
-  if(S.role==="worker")return workerHTML();
-  if(S.role==="supervisor"&&S.supervisorStep)return supervisorIdHTML();
-  if(S.role==="supervisor"&&showMappingScreen)return mappingScreenHTML();
-  if(S.role==="supervisor")return supHTML();
-  if(S.role==="admin"&&showMappingScreen)return mappingScreenHTML();
-  if(S.role==="admin")return adminHTML();
-  return loginHTML();
-}
-
-
-function topbarW(){
-  var modeTag=listMode==="closed"?
-    '<span style="display:inline-block;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#6ee7b7;font-weight:700;margin-left:6px">&#128274; Closed List</span>':
-    '<span style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#93c5fd;font-weight:700;margin-left:6px">&#128275; Open List</span>';
-  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);color:#93c5fd">&#128119; '+S.workerName+'</span>'+modeTag+'<span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company | ID: '+S.workerId+'</p></div><div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="blog" id="btnLogout">&#128682; Logout</button></div></div>';
-}
-function topbarS(){
-  var sn=S.supervisorName?' <span style="background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;color:#93c5fd;margin-left:8px">&#128203; '+S.supervisorName+'</span>':'';
-  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Supervisor Panel<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff">&#128202; Supervisor</span><span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company — MS Logistics</p></div><button class="bs" id="btnOut" style="font-size:12px;padding:8px 14px;color:#1e3a8a">Sign Out</button></div>';
-}
-function loginHTML(){
-  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note System</p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company</p></div></div><div class="wrap" style="max-width:420px"><div style="text-align:center;margin:32px 0 24px"><div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px"><img src="'+LOGO+'" style="height:90px;object-fit:contain" alt="SULB"/><p style="font-size:10px;font-weight:800;color:#1e3a8a;letter-spacing:3px;text-transform:uppercase;margin-top:6px">MS LOGISTICS</p></div><h2 style="color:#1e3a8a;margin:0 0 6px;font-size:22px">Sign In</h2><p style="color:#4a6080;font-size:13px">Enter your credentials to continue</p></div><div class="card"><div style="margin-bottom:14px"><label class="lbl">Username</label><input id="iu" placeholder="Work / Super"/></div><div style="margin-bottom:6px"><label class="lbl">Password</label><div style="position:relative"><input id="ip" type="password" placeholder="Enter password" style="padding-right:40px"/><span id="tp" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;color:#4a6080">&#128065;</span></div></div><p id="le" style="color:#dc2626;font-size:12px;margin-top:6px;text-align:center;display:none">&#9888; Invalid username or password.</p><button class="bp" id="btnLogin" style="margin-top:16px">Sign In &#8594;</button></div></div>';
-}
-function workerIdHTML(){
-  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note System</p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company</p></div></div><div class="wrap" style="max-width:420px"><div style="text-align:center;margin:32px 0 24px"><div style="font-size:52px;margin-bottom:10px">&#128119;</div><h2 style="color:#1e3a8a;margin:0 0 6px">Enter Your ID</h2><p style="color:#4a6080;font-size:13px">Enter your worker ID number</p></div><div class="card"><label class="lbl">Worker ID</label><input id="wid" placeholder="e.g. 001" maxlength="3" style="font-size:24px;text-align:center;letter-spacing:8px;padding:14px"/>'+(S.workerIdErr?'<p style="color:#dc2626;font-size:12px;margin-top:8px;text-align:center">&#9888; '+S.workerIdErr+'</p>':'')+'<button class="bp" id="btnWid" style="margin-top:14px">Confirm ID</button></div></div>';
-}
-function logoutHTML(){
-  return '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e8edf2"><div style="text-align:center;padding:40px;background:#fff;border-radius:20px;box-shadow:0 8px 32px rgba(30,58,138,0.12);max-width:380px;width:90%"><img src="'+LOGO+'" style="height:70px;object-fit:contain;margin-bottom:8px"/><p style="font-size:10px;font-weight:800;color:#1e3a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:20px">MS LOGISTICS</p><div style="font-size:52px;margin-bottom:16px">&#128075;</div><h2 style="color:#1e3a8a;font-size:22px;margin-bottom:10px">Thank You!</h2><p style="color:#2d4a7a;font-size:15px;margin-bottom:6px">Your work has been recorded successfully.</p><p style="color:#4a6080;font-size:13px;margin-bottom:24px">Stay safe and take care. See you next shift!</p><div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:12px;padding:12px 20px;margin-bottom:20px"><p style="color:#059669;font-size:13px;font-weight:600">&#9989; Logged out successfully</p></div><button class="bp" id="btnBackLogin" style="width:auto;padding:12px 32px">Back to Login</button></div></div>';
-}
+function draw(){var active=document.activeElement;var aid=active?active.id:null;var adr=active?active.dataset.r:null;var adf=active?active.dataset.f:null;var ac=active&&active.selectionStart!=null?active.selectionStart:null;document.getElementById("app").innerHTML=html();bind();if(aid){var el=document.getElementById(aid);if(el){el.focus();if(ac!=null){try{el.setSelectionRange(ac,ac);}catch(e){}}}}else if(adr!=null&&adf!=null){var inputs=document.querySelectorAll(".ri");for(var i=0;i<inputs.length;i++){if(inputs[i].dataset.r===adr&&inputs[i].dataset.f===adf){inputs[i].focus();if(ac!=null){try{inputs[i].setSelectionRange(ac,ac);}catch(e){}}break;}}}}
+function html(){if(S.logoutMsg)return logoutHTML();if(!S.role)return loginHTML();if(S.role==="worker"&&S.workerStep)return workerIdHTML();if(S.role==="worker"&&S.roWorkerScreen)return roWorkerHTML();if(S.role==="worker")return workerHTML();if(S.role==="supervisor"&&S.supervisorStep)return supervisorIdHTML();if(S.role==="supervisor"&&showMappingScreen)return mappingScreenHTML();if(S.role==="supervisor")return supHTML();if(S.role==="admin"&&showMappingScreen)return mappingScreenHTML();if(S.role==="admin")return adminHTML();return loginHTML();}
+function TB(){return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note System</p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company</p></div></div>';}
+function topbarW(){var modeTag=listMode==="closed"?'<span style="display:inline-block;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#6ee7b7;font-weight:700;margin-left:6px">&#128274; Closed List</span>':'<span style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:20px;padding:2px 10px;font-size:10px;color:#93c5fd;font-weight:700;margin-left:6px">&#128275; Open List</span>';return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note<span style="display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;margin-left:8px;background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);color:#93c5fd">&#128119; '+S.workerName+'</span>'+modeTag+'<span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company | ID: '+S.workerId+'</p></div><div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="blog" id="btnLogout">&#128682; Logout</button></div></div>';}
+function topbarS(){var sn=S.supervisorName?' <span style="background:rgba(59,130,246,0.3);border:1px solid rgba(59,130,246,0.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;color:#93c5fd;margin-left:8px">&#128203; '+S.supervisorName+'</span>':'';return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div style="flex:1"><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Supervisor Panel'+sn+'<span class="live">&#9679; LIVE</span></p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company</p></div><button class="bs" id="btnOut" style="font-size:12px;padding:8px 14px;color:#1e3a8a">Sign Out</button></div>';}
+function loginHTML(){return TB()+'<div class="wrap" style="max-width:420px"><div style="text-align:center;margin:32px 0 24px"><img src="'+LOGO+'" style="height:90px;object-fit:contain"/><p style="font-size:10px;font-weight:800;color:#1e3a8a;letter-spacing:3px;text-transform:uppercase;margin-top:6px">MS LOGISTICS</p><h2 style="color:#1e3a8a;margin:12px 0 6px;font-size:22px">Sign In</h2></div><div class="card"><div style="margin-bottom:14px"><label class="lbl">Username</label><input id="iu" placeholder="Work / Super / Admin"/></div><div style="margin-bottom:6px"><label class="lbl">Password</label><div style="position:relative"><input id="ip" type="password" placeholder="Enter password" style="padding-right:40px"/><span id="tp" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px;color:#4a6080">&#128065;</span></div></div><p id="le" style="color:#dc2626;font-size:12px;margin-top:6px;text-align:center;display:none">&#9888; Invalid username or password.</p><button class="bp" id="btnLogin" style="margin-top:16px">Sign In &#8594;</button></div></div>';}
+function workerIdHTML(){return TB()+'<div class="wrap" style="max-width:420px"><div style="text-align:center;margin:32px 0 24px"><div style="font-size:52px;margin-bottom:10px">&#128119;</div><h2 style="color:#1e3a8a;margin:0 0 6px">Enter Your ID</h2></div><div class="card"><label class="lbl">Worker ID</label><input id="wid" placeholder="e.g. 001" maxlength="3" style="font-size:24px;text-align:center;letter-spacing:8px;padding:14px"/>'+(S.workerIdErr?'<p style="color:#dc2626;font-size:12px;margin-top:8px;text-align:center">&#9888; '+S.workerIdErr+'</p>':'')+'<button class="bp" id="btnWid" style="margin-top:14px">Confirm ID</button></div></div>';}
+function supervisorIdHTML(){return TB()+'<div class="wrap" style="max-width:420px"><div style="text-align:center;margin:32px 0 24px"><div style="font-size:52px;margin-bottom:10px">&#128203;</div><h2 style="color:#1e3a8a;margin:0 0 6px">Supervisor ID</h2></div><div class="card"><label class="lbl">Supervisor ID</label><input id="sid" placeholder="e.g. S01" style="font-size:24px;text-align:center;letter-spacing:8px;padding:14px"/>'+(S.supervisorIdErr?'<p style="color:#dc2626;font-size:12px;margin-top:8px;text-align:center">'+S.supervisorIdErr+'</p>':'')+'<button class="bp" id="btnSid" style="margin-top:14px">Confirm</button></div></div>';}
+function logoutHTML(){return '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e8edf2"><div style="text-align:center;padding:40px;background:#fff;border-radius:20px;box-shadow:0 8px 32px rgba(30,58,138,0.12);max-width:380px;width:90%"><img src="'+LOGO+'" style="height:70px;object-fit:contain;margin-bottom:8px"/><p style="font-size:10px;font-weight:800;color:#1e3a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:20px">MS LOGISTICS</p><div style="font-size:52px;margin-bottom:16px">&#128075;</div><h2 style="color:#1e3a8a;font-size:22px;margin-bottom:10px">Thank You!</h2><p style="color:#4a6080;font-size:13px;margin-bottom:24px">Stay safe. See you next shift!</p><button class="bp" id="btnBackLogin" style="width:auto;padding:12px 32px">Back to Login</button></div></div>';}
 function workerHTML(){
+  var myOrders=roOrders.filter(function(o){return o.status==="active"&&(o.assignedWorkerId===S.workerId||o.assignedToAll===true);});
+  var roBanner="";
+  if(myOrders.length>0){
+    var td2=myOrders.reduce(function(s,o){return s+(o.lots||[]).reduce(function(s2,l){return s2+(l.lengths||[]).reduce(function(s3,ln){return s3+(ln.submittedPieces||[]).length;},0);},0);},0);
+    var tr2=myOrders.reduce(function(s,o){return s+(o.lots||[]).reduce(function(s2,l){return s2+(l.lengths||[]).reduce(function(s3,ln){return s3+ln.requiredPcs;},0);},0);},0);
+    roBanner='<div class="ro-task-banner"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div><p style="font-weight:800;color:#d97706;font-size:14px;margin:0">&#128293; Rolling Order Task</p><p style="color:#92400e;font-size:12px;margin:4px 0 0">'+myOrders.length+' active order(s) | '+td2+'/'+tr2+' pieces done</p></div><button id="btnGoRO" style="background:linear-gradient(135deg,#d97706,#f59e0b);border:none;border-radius:10px;padding:10px 18px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">&#128196; View Tasks</button></div></div>';
+  }
   var rh=S.rows.map(function(row,i){
     var batch=(row.heatNo||"")+(row.strand||"");
     var isDupLocal=batch&&row.remarks!=="No details"&&S.rows.filter(function(r,x){return x!==i&&((r.heatNo||"")+(r.strand||""))===batch&&r.remarks!=="No details";}).length>0;
-    var isAlreadySubmitted=row.alreadySubmitted;
-    var isNotFound=row.notFound;
-    var isAutoFilled=row.autoFilled;
-    var isReserved=row.reserved;
-    var cardClass="row-card"+(isAlreadySubmitted||isDupLocal?" dup":isReserved?" reserved":isNotFound?" notfound":isAutoFilled?" autofilled":"");
-    var statusMsg="";
-    if(isAlreadySubmitted) statusMsg='<div class="warn">&#9888; Batch No. <strong>'+batch+'</strong> was already submitted!</div>';
-    else if(isDupLocal) statusMsg='<div class="warn">&#9888; Batch No. <strong>'+batch+'</strong> duplicated in this request!</div>';
-    else if(isReserved) statusMsg='<div class="warn-purple">&#128274; Reserved by <strong>'+row.reservedBy+'</strong>. Choose a different piece.</div>';
-    else if(isNotFound&&batch.length>5) statusMsg='<div class="warn-yellow">&#10007; Batch No. <strong>'+batch+'</strong> not available in stock.</div>';
-    else if(isAutoFilled) statusMsg='<div class="info-green">&#10003; Details loaded.'+(stockData[batch]?' Available: <strong>'+parseFloat(stockData[batch].availableStock||0).toFixed(2)+' MT</strong> | Location: '+(stockData[batch].storageLocation||"--"):'')+'</div>';
-    return '<div class="'+cardClass+'">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
-      '<span style="font-size:13px;font-weight:800;color:#1e3a8a">Piece #'+(i+1)+'</span>'+
-      '<div style="display:flex;gap:6px">'+
-      '<button class="bc" data-cp="'+i+'">&#128203; Copy</button>'+
-      '<button class="bcl" data-cl="'+i+'">&#10006; Clear</button>'+
-      (S.rows.length>1?'<button class="br" data-ri="'+i+'">Remove</button>':'')+
-      '</div></div>'+
-      '<div class="grid2" style="margin-bottom:8px">'+
-      '<div><label class="lbl">Rolling Size</label><input placeholder="e.g. HR500/25-25-1" value="'+(row.rollingSize||"")+'" data-r="'+i+'" data-f="rollingSize" class="ri"'+(row.autoFilled?' readonly':'')+'/></div>'+
-      '<div><label class="lbl">Material Type</label><input placeholder="e.g. BLT" value="'+(row.materialType||"")+'" data-r="'+i+'" data-f="materialType" class="ri"'+(row.autoFilled?' readonly':'')+'/></div>'+
-      '</div>'+
-      '<div class="sub"><div class="sub-title">Material Details</div>'+
-      '<div class="grid3" style="margin-bottom:8px">'+
-      '<div><label class="lbl">Heat No.</label><input placeholder="e.g. 1264133" value="'+(row.heatNo||"")+'" data-r="'+i+'" data-f="heatNo" class="ri" inputmode="numeric"/></div>'+
-      '<div><label class="lbl">Strand</label><input placeholder="e.g. C01" value="'+(row.strand||"")+'" data-r="'+i+'" data-f="strand" class="ri"/></div>'+
-      '<div><label class="lbl">Batch No.</label><input value="'+batch+'" readonly/></div>'+
-      '</div>'+
-      '<div class="grid3">'+
-      '<div><label class="lbl">Grade</label><input placeholder="e.g. HT02" value="'+(row.grade||"")+'" data-r="'+i+'" data-f="grade" class="ri"'+(row.autoFilled?' readonly':'')+'/></div>'+
-      '<div><label class="lbl">Length</label><input placeholder="e.g. 12.1" value="'+(row.length||"")+'" data-r="'+i+'" data-f="length" class="ri"'+(row.autoFilled?' readonly':'')+'/></div>'+
-      '<div><label class="lbl">Quantity (MT)</label><input placeholder="e.g. 1" value="'+(row.quantity||"")+'" data-r="'+i+'" data-f="quantity" class="ri"/></div>'+
-      '</div></div>'+
-      '<div class="sub"><div class="sub-title">Location</div>'+
-      '<div class="grid2">'+
-      '<div><label class="lbl">From</label><input placeholder="e.g. H030" value="'+(row.locationFrom||"")+'" data-r="'+i+'" data-f="locationFrom" class="ri"/></div>'+
-      '<div><label class="lbl">To</label><input placeholder="e.g. Melt" value="'+(row.locationTo||"")+'" data-r="'+i+'" data-f="locationTo" class="ri"/></div>'+
-      '</div></div>'+
-      '<div><label class="lbl">Remarks <span style="color:#dc2626">*</span></label><select data-r="'+i+'" data-f="remarks" class="ri" style="background:#fff"><option value="">-- Select Remark --</option>'+remarksOptions.map(function(opt){return '<option value="'+opt+'"'+( row.remarks===opt?' selected':'')+'>'+opt+'</option>';}).join("")+'</select></div>'+
-      statusMsg+'</div>';
+    var cc="row-card"+(row.alreadySubmitted||isDupLocal?" dup":row.reserved?" reserved":row.notFound?" notfound":row.autoFilled?" autofilled":"");
+    var sm="";
+    if(row.alreadySubmitted)sm='<div class="warn">&#9888; Batch <strong>'+batch+'</strong> already submitted!</div>';
+    else if(isDupLocal)sm='<div class="warn">&#9888; Batch <strong>'+batch+'</strong> duplicated!</div>';
+    else if(row.reserved)sm='<div class="warn-purple">&#128274; Reserved by <strong>'+row.reservedBy+'</strong></div>';
+    else if(row.notFound&&batch.length>5)sm='<div class="warn-yellow">&#10007; Batch <strong>'+batch+'</strong> not in stock</div>';
+    else if(row.autoFilled)sm='<div class="info-green">&#10003; Details auto-filled</div>';
+    return '<div class="'+cc+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-size:13px;font-weight:800;color:#1e3a8a">Piece #'+(i+1)+'</span><div style="display:flex;gap:6px"><button class="bc" data-cp="'+i+'">&#128203; Copy</button><button class="bcl" data-cl="'+i+'">&#10006; Clear</button>'+(S.rows.length>1?'<button class="br" data-ri="'+i+'">Remove</button>':'')+'</div></div><div class="grid2" style="margin-bottom:8px"><div><label class="lbl">Rolling Size</label><input placeholder="e.g. UB406X178" value="'+(row.rollingSize||"")+'" data-r="'+i+'" data-f="rollingSize" class="ri"'+(row.autoFilled?' readonly':'')+'/></div><div><label class="lbl">Material Type</label><input placeholder="e.g. BLT" value="'+(row.materialType||"")+'" data-r="'+i+'" data-f="materialType" class="ri"'+(row.autoFilled?' readonly':'')+'/></div></div><div class="sub"><div class="sub-title">Material Details</div><div class="grid3" style="margin-bottom:8px"><div><label class="lbl">Heat No.</label><input placeholder="e.g. 1264133" value="'+(row.heatNo||"")+'" data-r="'+i+'" data-f="heatNo" class="ri" inputmode="numeric"/></div><div><label class="lbl">Strand</label><input placeholder="e.g. C01" value="'+(row.strand||"")+'" data-r="'+i+'" data-f="strand" class="ri"/></div><div><label class="lbl">Batch No.</label><input value="'+batch+'" readonly/></div></div><div class="grid3"><div><label class="lbl">Grade</label><input placeholder="e.g. S355JR" value="'+(row.grade||"")+'" data-r="'+i+'" data-f="grade" class="ri"'+(row.autoFilled?' readonly':'')+'/></div><div><label class="lbl">Length</label><input placeholder="e.g. 12.1" value="'+(row.length||"")+'" data-r="'+i+'" data-f="length" class="ri"'+(row.autoFilled?' readonly':'')+'/></div><div><label class="lbl">Quantity (MT)</label><input placeholder="e.g. 1" value="'+(row.quantity||"")+'" data-r="'+i+'" data-f="quantity" class="ri"/></div></div></div><div class="sub"><div class="sub-title">Location</div><div class="grid2"><div><label class="lbl">From</label><input placeholder="e.g. H030" value="'+(row.locationFrom||"")+'" data-r="'+i+'" data-f="locationFrom" class="ri"/></div><div><label class="lbl">To</label><input placeholder="e.g. Melt" value="'+(row.locationTo||"")+'" data-r="'+i+'" data-f="locationTo" class="ri"/></div></div></div><div><label class="lbl">Remarks <span style="color:#dc2626">*</span></label><select data-r="'+i+'" data-f="remarks" class="ri" style="background:#fff"><option value="">-- Select Remark --</option>'+remarksOptions.map(function(opt){return '<option value="'+opt+'"'+(row.remarks===opt?' selected':'')+'>'+opt+'</option>';}).join('')+'</select></div>'+sm+'</div>';
   }).join('');
-  var modeInfo=listMode==="closed"?
-    '<div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#059669;font-weight:600">&#128274; Closed List — Details auto-fill from inventory'+(stockLastUpdate?' | Updated: '+stockLastUpdate:'')+'</div>':
-    '<div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#2563eb;font-weight:600">&#128275; Open List — Enter all details manually</div>';
-  return topbarW()+'<div class="wrap">'+modeInfo+
-    (S.submitted?
-      '<div class="sbox"><div style="font-size:50px">&#9989;</div><h3 style="color:#059669;margin:10px 0 4px">Submitted Successfully!</h3><p style="color:#4a6080;font-size:13px">Data saved. Supervisor can see it now.</p><p style="color:#1e3a8a;font-weight:700">'+S.rows.filter(function(r){return r.heatNo;}).length+' piece(s) recorded</p><p style="color:#2563eb;font-size:13px;margin-top:8px">&#128336; Time taken: <strong>'+S.timeTaken+'</strong></p></div><button class="bp" id="btnNew">Enter New Request</button>'
-    :
-      '<div class="card"><div class="card-title">Request Information</div><div class="grid2">'+
-      '<div><label class="lbl">Sheet No.</label><input id="hs" value="'+S.hdr.sheetNo+'"/></div>'+
-      '<div><label class="lbl">Date</label><input readonly value="'+S.hdr.date+'"/></div>'+
-      '<div><label class="lbl">Operator Name</label><input readonly value="'+S.workerName+'"/></div>'+
-      '<div><label class="lbl">Starting Time</label><input readonly value="'+(S.hdr.startTime||"--:--:--")+'"/></div>'+
-      '</div></div>'+
-      '<div class="card"><div class="card-title">Pieces to Transfer</div>'+rh+
-      '<button class="ba" id="btnAdd">+ Add Another Piece</button></div>'+
-      '<button class="bp" id="btnSub"'+(S.saving?' disabled style="opacity:0.6"':'')+'>'+
-      (S.saving?'Saving...':'Submit &#10003;')+'</button>'
-    )+'</div>';
+  var mi=listMode==="closed"?'<div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#059669;font-weight:600">&#128274; Closed List'+(stockLastUpdate?' | Updated: '+stockLastUpdate:'')+'</div>':'<div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#2563eb;font-weight:600">&#128275; Open List — Enter all details manually</div>';
+  return topbarW()+'<div class="wrap">'+roBanner+mi+(S.submitted?'<div class="sbox"><div style="font-size:50px">&#9989;</div><h3 style="color:#059669;margin:10px 0 4px">Submitted!</h3><p style="color:#1e3a8a;font-weight:700">'+S.rows.filter(function(r){return r.heatNo;}).length+' piece(s) | &#128336; '+S.timeTaken+'</p></div><button class="bp" id="btnNew">New Request</button>':'<div class="card"><div class="card-title">Request Information</div><div class="grid2"><div><label class="lbl">Sheet No.</label><input id="hs" value="'+S.hdr.sheetNo+'"/></div><div><label class="lbl">Date</label><input readonly value="'+S.hdr.date+'"/></div><div><label class="lbl">Operator</label><input readonly value="'+S.workerName+'"/></div><div><label class="lbl">Start Time</label><input readonly value="'+(S.hdr.startTime||"--:--:--")+'"/></div></div></div><div class="card"><div class="card-title">Pieces</div>'+rh+'<button class="ba" id="btnAdd">+ Add Another Piece</button></div><button class="bp" id="btnSub"'+(S.saving?' disabled style="opacity:0.6"':'')+'>'+(S.saving?'Saving...':'Submit &#10003;')+'</button>')+'</div>';
 }
-
-
-function supBody(){
-  var tp=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);
-  var tab=S.supTab||"requests";
-  var body="";
-  if(tab==="requests"){
-    if(S.loading)body='<div class="card" style="text-align:center;padding:40px"><p style="color:#4a6080">Loading...</p></div>';
-    else if(!S.sessions||!S.sessions.length)body='<div class="card" style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px">📭</div><p style="color:#4a6080;font-size:15px">No requests yet</p></div>';
-    else body=S.sessions.map(function(s,si){
-      var rows=s.rows||[];
-      var rowsHtml=rows.map(function(r,ri){
-        return '<tr><td>'+ri+'</td><td>'+(r.heatNo||"")+'</td><td>'+(r.strand||"")+'</td><td>'+(r.batchNo||"")+'</td><td>'+(r.grade||"")+'</td><td>'+(r.length||"")+'</td><td>'+(r.quantity||"")+'</td><td>'+(r.locationFrom||"")+'</td><td>'+(r.locationTo||"")+'</td><td>'+(r.remarks||"")+'</td></tr>';
-      }).join('');
-      return '<div class="card" style="margin-bottom:14px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px">'+
-          '<div><p style="font-weight:800;color:#1e3a8a;font-size:15px;margin:0">'+s.workerName+' <span style="font-size:12px;color:#4a6080">('+s.workerId+')</span></p>'+
-          '<p style="font-size:12px;color:#4a6080;margin:4px 0 0">'+(s.header&&s.header.date?s.header.date:s.date||"")+' | Start: '+(s.header&&s.header.startTime?s.header.startTime:"")+' | End: '+(s.header&&s.header.endTime?s.header.endTime:"")+' | Duration: '+(s.timeTaken||"")+'</p></div>'+
-          '<div style="display:flex;gap:8px">'+
-            '<button data-ex="'+s.id+'" class="bp" style="padding:8px 12px;font-size:12px">&#11167; Excel</button>'+
-            '<button data-dc="'+s.id+'" class="bs" style="padding:8px 12px;font-size:12px;background:rgba(220,38,38,0.1);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Delete</button>'+
-          '</div>'+
-        '</div>'+
-        '<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Heat No.</th><th>Strand</th><th>Batch No.</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div>'+
-      '</div>';
-    }).join('');
+function roWorkerHTML(){
+  var myOrders=roOrders.filter(function(o){return o.status==="active"&&(o.assignedWorkerId===S.workerId||o.assignedToAll===true);});
+  if(!roActiveOrder){
+    var cards=myOrders.length===0?'<div style="text-align:center;padding:40px;color:#4a6080"><div style="font-size:48px">&#128196;</div><p style="margin-top:12px">No active rolling orders</p></div>':myOrders.map(function(o){var tp=(o.lots||[]).reduce(function(s,l){return s+(l.lengths||[]).reduce(function(s2,ln){return s2+ln.requiredPcs;},0);},0);var dp=(o.lots||[]).reduce(function(s,l){return s+(l.lengths||[]).reduce(function(s2,ln){return s2+(ln.submittedPieces||[]).length;},0);},0);var pct=tp>0?Math.round(dp/tp*100):0;return '<button class="ro-lot-btn'+(pct>=100?' complete':'')+'" data-ro-order="'+o.id+'"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><p style="font-weight:800;color:#1e3a8a;font-size:14px;margin:0">&#128196; '+o.finishRollingSize+'</p><p style="font-size:11px;color:#4a6080;margin:4px 0 0">'+o.date+' | '+o.createdBy+'</p></div><div style="text-align:right"><span class="counter-badge '+(pct>=100?'counter-done':'counter-ok')+'">'+dp+'/'+tp+'</span><div style="margin-top:6px;background:#e8edf2;border-radius:10px;height:5px;width:80px;margin-left:auto"><div style="background:'+(pct>=100?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+Math.min(pct,100)+'%"></div></div></div></div></button>';}).join('');
+    return topbarW()+'<div class="wrap"><div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><button id="btnRoBack" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Back</button><div><p style="font-size:16px;font-weight:800;color:#1e3a8a;margin:0">&#128293; Rolling Orders</p></div></div>'+cards+'</div>';
   }
-  if(tab==="stock"){
-    var modeColor=listMode==="closed"?"#059669":"#2563eb";
-    var modeBg=listMode==="closed"?"rgba(5,150,105,0.1)":"rgba(37,99,235,0.1)";
-    var reservations=Object.entries(reservedBatches||{});
-    var resHtml=reservations.length?reservations.map(function(e){
-      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
-        '<span style="flex:1;color:#1e3a8a;font-weight:600;font-size:13px">'+e[0]+'<span style="color:#4a6080;font-size:11px;margin-left:8px">Reserved by '+e[1].workerName+'</span></span>'+
-        '<button data-release="'+e[0]+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Release</button>'+
-      '</div>';
-    }).join(''):'<p style="color:#4a6080;font-size:13px;text-align:center;padding:10px">No active reservations</p>';
-    body='<div class="card"><div class="card-title">&#128230; Upload SAP Stock File</div>'+
-      '<div style="margin-bottom:8px"><span style="font-size:12px;color:#4a6080">Last updated: '+(stockLastUpdate||"Never")+'</span></div>'+
-      '<label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:block;text-align:center;margin-bottom:8px">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label>'+
-      '<button class="bs" id="btnClearStock" style="width:100%;padding:10px;margin-top:4px;background:rgba(220,38,38,0.08);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Clear Stock</button>'+
-      '<button class="bs" id="btnResetMapping" style="width:100%;padding:10px;margin-top:8px;background:rgba(245,158,11,0.08);color:#d97706;border:1px solid rgba(245,158,11,0.3)">&#128257; Reset Column Mapping</button>'+
-      '</div>'+
-      '<div class="card"><div class="card-title">&#9881; List Mode</div>'+
-      '<div style="display:flex;gap:10px;margin-bottom:12px">'+
-      '<button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button>'+
-      '<button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button>'+
-      '</div></div>'+
-      '<div class="card"><div class="card-title">&#128274; Active Reservations</div>'+resHtml+'</div>';
+  var order=roOrders.find(function(o){return o.id===roActiveOrder;});
+  if(!order){roActiveOrder=null;return roWorkerHTML();}
+  if(!roActiveLot){
+    var lotsH=(order.lots||[]).map(function(lot){var tp=(lot.lengths||[]).reduce(function(s,l){return s+l.requiredPcs;},0);var dp=(lot.lengths||[]).reduce(function(s,l){return s+(l.submittedPieces||[]).length;},0);var done=dp>=tp&&tp>0;return '<button class="ro-lot-btn'+(done?' complete':'')+'" data-ro-lot="'+lot.id+'"><div style="display:flex;justify-content:space-between;align-items:center"><div><p style="font-weight:800;color:#1e3a8a;font-size:13px;margin:0">&#128202; '+lot.id+'</p><p style="font-size:11px;color:#4a6080;margin:3px 0">'+(lot.lengths||[]).length+' length(s)</p></div><span class="counter-badge '+(done?'counter-done':'counter-ok')+'">'+dp+'/'+tp+'</span></div></button>';}).join('');
+    return topbarW()+'<div class="wrap"><div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><button id="btnRoBackOrder" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Orders</button><div><p style="font-size:15px;font-weight:800;color:#1e3a8a;margin:0">'+order.finishRollingSize+'</p><p style="font-size:11px;color:#4a6080;margin:0">Select Rolling Lot</p></div></div>'+lotsH+'</div>';
   }
-  if(tab==="searchfix"){
-    var sq=searchQuery||"";
-    var results=[];
-    if(sq.length>=2){
-      (S.sessions||[]).forEach(function(s){
-        (s.rows||[]).forEach(function(r,ri){
-          if((r.batchNo&&r.batchNo.toLowerCase().includes(sq.toLowerCase()))||(r.heatNo&&r.heatNo.toLowerCase().includes(sq.toLowerCase()))||(r.strand&&r.strand.toLowerCase().includes(sq.toLowerCase()))){
-            results.push({session:s,row:r,rowIdx:ri});
-          }
-        });
-      });
-    }
-    var resRows=results.map(function(item){
-      return '<div style="background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);padding:12px;margin-bottom:8px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
-          '<div><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:13px">Batch: '+(item.row.batchNo||"")+'</p>'+
-          '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(item.row.heatNo||"")+' | Strand: '+(item.row.strand||"")+'</p>'+
-          '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Worker: '+item.session.workerName+' | Date: '+item.session.date+'</p></div>'+
-          '<button data-dc="'+item.session.id+'" data-ridx="'+item.rowIdx+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Remove Piece</button>'+
-        '</div></div>';
-    }).join('');
-    body='<div class="card"><div class="card-title">&#128269; Search & Fix</div>'+
-      '<input id="searchInput" placeholder="Search by Batch No., Heat No., or Strand..." value="'+(sq)+'"/>'+
-      '<div style="margin-top:14px">'+
-        (sq.length<2?'<p style="color:#4a6080;font-size:13px;text-align:center">Enter at least 2 characters to search</p>':
-         results.length?resRows:'<p style="color:#4a6080;font-size:13px;text-align:center">No results found for "'+sq+'"</p>')+
-      '</div></div>';
+  var lot=order.lots.find(function(l){return l.id===roActiveLot;});
+  if(!lot){roActiveLot=null;return roWorkerHTML();}
+  if(!roActiveLength){
+    var lensH=(lot.lengths||[]).map(function(len){var d=(len.submittedPieces||[]).length;var r=len.requiredPcs;var ok=d>=r;var cls='ro-length-btn'+(len.closed?' closed':ok?' complete':'');return '<button class="'+cls+'" '+(len.closed?'disabled ':'')+'data-ro-length="'+len.key+'"><p style="font-weight:800;color:#1e3a8a;font-size:16px;margin:0">'+len.length+' m</p><p style="font-size:12px;color:#4a6080;margin:4px 0">'+len.grade+'</p><span class="counter-badge '+(ok?'counter-done':d>r?'counter-over':'counter-ok')+'">'+d+'/'+r+'</span>'+(len.closed?'<p style="font-size:10px;color:#dc2626;margin:4px 0 0;font-weight:700">&#128274; CLOSED</p>':'')+'</button>';}).join('');
+    return topbarW()+'<div class="wrap"><div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><button id="btnRoBackLot" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Lots</button><div><p style="font-size:15px;font-weight:800;color:#1e3a8a;margin:0">&#128202; '+roActiveLot+'</p><p style="font-size:11px;color:#4a6080;margin:0">Select Length</p></div></div><div class="card"><div class="card-title">Available Lengths</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+lensH+'</div></div></div>';
   }
-  return body;
+  var li=lot.lengths.find(function(l){return l.key===roActiveLength;});
+  if(!li){roActiveLength=null;return roWorkerHTML();}
+  var d3=(li.submittedPieces||[]).length,r3=li.requiredPcs,done3=d3>=r3;
+  var sList=(li.submittedPieces||[]).map(function(p,pi){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f8fafc;border:1px solid rgba(30,58,138,0.1);border-radius:8px;margin-bottom:6px"><div><p style="margin:0;font-size:12px;font-weight:700;color:#1e3a8a">'+( p.batchNo||"--")+'</p><p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(p.heatNo||"")+'&nbsp;|&nbsp;Strand: '+(p.strand||"")+'&nbsp;|&nbsp;Qty: '+(p.quantity||"")+'</p></div><p style="margin:0;font-size:11px;color:#4a6080">'+p.time+'</p></div>';}).join('');
+  return topbarW()+'<div class="wrap"><div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><button id="btnRoBackLength" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Lengths</button><div><p style="font-size:14px;font-weight:800;color:#1e3a8a;margin:0">'+li.length+'m — '+li.grade+'</p><p style="font-size:11px;color:#4a6080;margin:0">Lot: '+roActiveLot+'</p></div></div><div style="background:'+(done3?'rgba(16,185,129,0.08)':'rgba(30,58,138,0.04)')+';border:2px solid '+(done3?'rgba(16,185,129,0.4)':'rgba(30,58,138,0.15)')+';border-radius:14px;padding:16px;margin-bottom:16px;text-align:center"><p style="font-size:36px;font-weight:900;color:'+(done3?'#059669':'#1e3a8a')+';margin:0">'+d3+' / '+r3+'</p><p style="font-size:13px;color:#4a6080;margin:4px 0 0">'+(done3?'&#9989; Complete!':Math.max(0,r3-d3)+' remaining')+'</p></div>'+(sList?'<div class="card"><div class="card-title">Submitted Pieces</div>'+sList+'</div>':'')+(done3?'<div class="info-green" style="text-align:center;padding:16px">&#9989; All pieces entered! Press Submit to save.</div><button class="bp" id="btnRoFinalSubmit" style="margin-top:12px">Submit to Supervisor &#10003;</button>':'<div class="card"><div class="card-title">Enter Piece Details</div><div class="sub"><div class="sub-title">Material Details</div><div class="grid3" style="margin-bottom:8px"><div><label class="lbl">Heat No.</label><input id="ro_heatNo" placeholder="e.g. 1264133" inputmode="numeric"/></div><div><label class="lbl">Strand</label><input id="ro_strand" placeholder="e.g. C01"/></div><div><label class="lbl">Batch No.</label><input id="ro_batchNo" readonly style="font-weight:700"/></div></div><div class="grid3"><div><label class="lbl">Grade</label><input id="ro_grade" value="'+li.grade+'" readonly/></div><div><label class="lbl">Length (m)</label><input id="ro_length" value="'+li.length+'" readonly/></div><div><label class="lbl">Quantity (MT)</label><input id="ro_qty" placeholder="e.g. 1"/></div></div></div><div class="sub"><div class="sub-title">Location</div><div class="grid2"><div><label class="lbl">From</label><input id="ro_locFrom" placeholder="e.g. H030"/></div><div><label class="lbl">To</label><input id="ro_locTo" value="Rolling Mill" readonly/></div></div></div><div><label class="lbl">Remarks <span style="color:#dc2626">*</span></label><select id="ro_remarks" style="background:#fff"><option value="">-- Select Remark --</option>'+remarksOptions.map(function(o2){return '<option value="'+o2+'">'+o2+'</option>';}).join('')+'</select></div><button class="bp" id="btnRoSubmitPiece" style="margin-top:12px">Submit Piece &#10003;</button></div>')+'</div>';
 }
-
+function supTabs(){return '<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap"><button id="tabReq" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="requests"?"linear-gradient(135deg,#1e3a8a,#3b82f6)":"#fff")+';color:'+(S.supTab==="requests"?"#fff":"#1e3a8a")+'">&#128203; Requests</button><button id="tabRO" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="rolling"?"linear-gradient(135deg,#d97706,#f59e0b)":"#fff")+';color:'+(S.supTab==="rolling"?"#fff":"#d97706")+'">&#128293; Rolling</button><button id="tabStock" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="stock"?"linear-gradient(135deg,#059669,#10b981)":"#fff")+';color:'+(S.supTab==="stock"?"#fff":"#059669")+'">&#128196; Stock</button><button id="tabSearch" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="search"?"linear-gradient(135deg,#7c3aed,#a78bfa)":"#fff")+';color:'+(S.supTab==="search"?"#fff":"#7c3aed")+'">&#128269; Search</button></div>';}
 function supHTML(){
+  var tabs=supTabs();
+  if(S.supTab==="rolling")return topbarS()+'<div class="wrap">'+tabs+roSupHTML()+'</div>';
+  if(S.supTab==="search"){var q=searchQuery.trim().toLowerCase();var res=[];if(q.length>2){S.sessions.forEach(function(s){(s.rows||[]).forEach(function(r,ri){if((r.batchNo||"").toLowerCase().includes(q)||(r.heatNo||"").toLowerCase().includes(q)||(r.strand||"").toLowerCase().includes(q)){res.push({session:s,row:r,rowIndex:ri});}});});}return topbarS()+'<div class="wrap">'+tabs+'<div class="card"><div class="card-title">&#128269; Search & Fix</div><input class="search-box" id="searchInput" placeholder="&#128269; Batch No., Heat No., Strand..." value="'+searchQuery+'"/>'+(q.length>2&&res.length===0?'<p style="text-align:center;padding:20px;color:#4a6080">No results for "'+searchQuery+'"</p>':res.length>0?'<div style="margin-top:12px">'+res.map(function(x){var s=x.session;var r=x.row;return '<div class="search-result"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div><p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">Batch: <span style="color:#3b82f6">'+r.batchNo+'</span></p><p style="font-size:11px;color:#4a6080;margin:3px 0">Heat: '+r.heatNo+' | Strand: '+r.strand+'</p><p style="font-size:11px;color:#4a6080;margin:0">&#128119; '+(s.workerName||"--")+' | &#128197; '+(s.header&&s.header.date?s.header.date:"")+'</p></div><button style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer" data-removebatch="'+r.batchNo+'" data-sessionid="'+s.id+'">&#128465; Remove</button></div></div>';}).join('')+'</div>':q.length>0?'<p style="font-size:12px;color:#9ab;margin-top:8px;text-align:center">Type at least 3 characters...</p>':'')+'</div></div>';}
+  if(S.supTab==="stock"){var sc=Object.keys(stockData).length;var re=Object.entries(reservedBatches);return topbarS()+'<div class="wrap">'+tabs+'<div class="card"><div class="card-title">&#128196; Stock</div><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:14px;margin-bottom:14px"><div>'+(sc>0?'<p style="font-size:13px;font-weight:700;color:#059669;margin:0">&#9989; '+sc+' pieces | '+stockLastUpdate+'</p>':'<p style="font-size:13px;font-weight:700;color:#d97706;margin:0">&#9888; No stock uploaded</p>')+'</div><div style="display:flex;gap:8px;flex-wrap:wrap"><label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:inline-block">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label>'+(sc>0?'<button id="btnClearStock" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:10px 16px;color:#dc2626;font-weight:700;font-size:13px;cursor:pointer">&#128465; Clear</button>':'')+'<button id="btnResetMapping" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px 16px;color:#d97706;font-weight:700;font-size:13px;cursor:pointer">&#128257; Reset Mapping</button></div></div><div class="card-title">&#128275; List Mode</div><div style="display:flex;gap:10px;margin-bottom:12px"><button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button><button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button></div>'+(re.length>0?'<div class="card-title" style="margin-top:8px">&#128274; Reservations ('+re.length+')</div>'+re.map(function(e){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(139,92,246,0.1)"><p style="font-size:12px;color:#7c3aed;margin:0;font-weight:600">&#128274; <strong>'+e[0]+'</strong> — '+e[1].workerName+'</p><button style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:6px;padding:4px 12px;color:#059669;font-size:11px;font-weight:700;cursor:pointer" data-release="'+e[0]+'">&#128275; Release</button></div>';}).join(''):'')+'</div></div>';}
   var tp=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);
-  var tabs='<div style="display:flex;gap:8px;margin-bottom:18px">'+
-    '<button id="tabReq" style="flex:1;padding:10px;border-radius:10px;font-weight:700;font-size:13px;border:none;cursor:pointer;background:'+(S.supTab==="requests"?"linear-gradient(135deg,#1e3a8a,#3b82f6)":"#fff")+';color:'+(S.supTab==="requests"?"#fff":"#1e3a8a")+';box-shadow:0 2px 8px rgba(30,58,138,0.1)">&#128203; Requests</button>'+
-    '<button id="tabStock" style="flex:1;padding:10px;border-radius:10px;font-weight:700;font-size:13px;border:none;cursor:pointer;background:'+(S.supTab==="stock"?"linear-gradient(135deg,#059669,#10b981)":"#fff")+';color:'+(S.supTab==="stock"?"#fff":"#059669")+';box-shadow:0 2px 8px rgba(16,185,129,0.1)">&#128196; Stock & Settings</button>'+
-    '<button id="tabSearch" style="flex:1;padding:10px;border-radius:10px;font-weight:700;font-size:13px;border:none;cursor:pointer;background:'+(S.supTab==="search"?"linear-gradient(135deg,#7c3aed,#a78bfa)":"#fff")+';color:'+(S.supTab==="search"?"#fff":"#7c3aed")+';box-shadow:0 2px 8px rgba(124,58,237,0.1)">&#128269; Search & Fix</button>'+
-    '</div>';
-
-  if(S.supTab==="search"){
-    var q=searchQuery.trim().toLowerCase();
-    var results=[];
-    if(q.length>2){
-      S.sessions.forEach(function(s){
-        (s.rows||[]).forEach(function(r,ri){
-          if((r.batchNo||"").toLowerCase().includes(q)||
-             (r.heatNo||"").toLowerCase().includes(q)||
-             (r.strand||"").toLowerCase().includes(q)){
-            results.push({session:s,row:r,rowIndex:ri});
-          }
-        });
-      });
-    }
-    return topbarS()+'<div class="wrap">'+tabs+
-      '<div class="card">'+
-      '<div class="card-title">&#128269; Search & Fix Pieces</div>'+
-      '<p style="font-size:12px;color:#4a6080;margin-bottom:12px">Search by Batch No., Heat No., or Strand to find and remove incorrectly submitted pieces.</p>'+
-      '<input class="search-box" id="searchInput" placeholder="&#128269; Type Batch No., Heat No., or Strand..." value="'+searchQuery+'"/>'+
-      (q.length>2&&results.length===0?
-        '<div style="text-align:center;padding:24px;color:#4a6080;font-size:13px;margin-top:10px">&#128269; No results found for <strong>"'+searchQuery+'"</strong></div>':
-        results.length>0?
-          '<div style="margin-top:12px">'+
-          '<p style="font-size:11px;color:#4a6080;margin-bottom:8px;font-weight:600">Found '+results.length+' result(s):</p>'+
-          results.map(function(res){
-            var s=res.session;
-            var r=res.row;
-            return '<div class="search-result">'+
-              '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">'+
-              '<div>'+
-              '<p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">Batch: <span style="color:#3b82f6">'+r.batchNo+'</span></p>'+
-              '<p style="font-size:11px;color:#4a6080;margin:3px 0">Heat: '+r.heatNo+' | Strand: '+r.strand+' | Grade: '+r.grade+' | Length: '+r.length+'</p>'+
-              '<p style="font-size:11px;color:#4a6080;margin:0">&#128119; '+(s.workerName||"--")+' | &#128197; '+(s.header&&s.header.date?s.header.date:"")+' | &#9201; '+(s.header&&s.header.startTime?s.header.startTime:"--")+'</p>'+
-              '<p style="font-size:11px;color:#059669;margin:2px 0">Sheet: '+(s.header&&s.header.sheetNo?s.header.sheetNo:"--")+' | '+(s.rows?s.rows.length:0)+' piece(s) in this request</p>'+
-              '</div>'+
-              '<button style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap" data-removebatch="'+r.batchNo+'" data-sessionid="'+s.id+'">&#128465; Remove Piece</button>'+
-              '</div>'+
-              '</div>';
-          }).join('')+
-          '</div>':
-        q.length>0&&q.length<=2?'<p style="font-size:12px;color:#9ab;margin-top:8px;text-align:center">Type at least 3 characters to search...</p>':''
-      )+
-      '</div></div>';
-  }
-
-  if(S.supTab==="stock"){
-    var stockCount=Object.keys(stockData).length;
-    var resEntries=Object.entries(reservedBatches);
-    return topbarS()+'<div class="wrap">'+tabs+
-      '<div class="card">'+
-      '<div class="card-title">&#128196; Stock Inventory</div>'+
-      '<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:14px;margin-bottom:16px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">'+
-      '<div>'+(stockCount>0?'<p style="font-size:13px;font-weight:700;color:#059669;margin:0">&#9989; '+stockCount+' pieces loaded</p><p style="font-size:11px;color:#4a6080;margin:4px 0 0">Last updated: '+(stockLastUpdate||"--")+'</p>':'<p style="font-size:13px;font-weight:700;color:#d97706;margin:0">&#9888; No stock file uploaded yet</p>')+'</div>'+
-      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-      '<label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:inline-block">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label>'+
-      (stockCount>0?'<button id="btnClearStock" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:10px 16px;color:#dc2626;font-weight:700;font-size:13px;cursor:pointer">&#128465; Clear Stock</button>':'')+
-      '<button id="btnResetMapping" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px 16px;color:#d97706;font-weight:700;font-size:13px;cursor:pointer">&#128257; Reset Column Mapping</button>'+
-      '</div></div></div>'+
-      '<div class="card-title">&#128275; List Mode</div>'+
-      '<div style="display:flex;gap:10px;margin-bottom:12px">'+
-      '<button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button>'+
-      '<button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button>'+
-      '</div>'+
-      '<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.1);border-radius:10px;padding:12px;font-size:12px;color:#4a6080;margin-bottom:16px">'+
-      '<p style="margin:0 0 4px"><strong style="color:#1e3a8a">&#128275; Open List:</strong> Workers enter all details manually</p>'+
-      '<p style="margin:0"><strong style="color:#059669">&#128274; Closed List:</strong> Heat No. + Strand only — details auto-fill from SAP stock</p>'+
-      '</div>'+
-      (resEntries.length>0?
-        '<div class="card-title">&#128274; Active Reservations ('+resEntries.length+')</div>'+
-        '<div style="background:rgba(139,92,246,0.04);border:1px solid rgba(139,92,246,0.15);border-radius:10px;padding:12px;margin-bottom:8px">'+
-        resEntries.map(function(e){
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(139,92,246,0.1)">'+
-            '<p style="font-size:12px;color:#7c3aed;margin:0;font-weight:600">&#128274; <strong>'+e[0]+'</strong> — '+e[1].workerName+'</p>'+
-            '<button style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:6px;padding:4px 12px;color:#059669;font-size:11px;font-weight:700;cursor:pointer" data-release="'+e[0]+'">&#128275; Release</button>'+
-            '</div>';
-        }).join('')+
-        '</div>':'')+
-      '</div></div>';
-  }
-
-  var stats='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">'+
-    '<div class="sc"><div style="font-size:22px">&#128203;</div><div style="font-size:22px;font-weight:800;color:#1e3a8a">'+S.sessions.length+'</div><div style="font-size:11px;color:#4a6080">Total Requests</div></div>'+
-    '<div class="sc"><div style="font-size:22px">&#128296;</div><div style="font-size:22px;font-weight:800;color:#1e3a8a">'+tp+'</div><div style="font-size:11px;color:#4a6080">Total Pieces</div></div></div>';
-  if(S.loading) return topbarS()+'<div class="wrap">'+tabs+stats+'<div class="ebox"><div style="font-size:36px">&#9203;</div><p style="color:#4a6080;margin-top:12px">Loading...</p></div></div>';
-  if(!S.sessions.length) return topbarS()+'<div class="wrap">'+tabs+stats+'<div class="ebox"><div style="font-size:46px">&#128237;</div><p style="color:#4a6080;margin-top:12px">No requests yet</p></div></div>';
-  var sh=S.sessions.map(function(s){
-    var dc=S.delC===s.id?'<div class="dc"><span style="font-size:13px;color:#dc2626;font-weight:600">Delete this request permanently?</span><div style="display:flex;gap:8px"><button class="bd" style="padding:7px 14px" data-dc="'+s.id+'">Yes, Delete</button><button class="bs" style="padding:7px 14px" id="btnDC">Cancel</button></div></div>':"";
-    var rows=(s.rows||[]).map(function(r,i){
-      return '<tr><td>'+(i+1)+'</td><td style="font-weight:700;color:#1e3a8a">'+(r.batchNo||"")+'</td><td>'+(r.heatNo||"")+'</td><td>'+(r.strand||"")+'</td><td>'+(r.rollingSize||"")+'</td><td>'+(r.materialType||"")+'</td><td>'+(r.grade||"")+'</td><td>'+(r.length||"")+'</td><td>'+(r.quantity||"")+'</td><td>'+(r.locationFrom||"")+'</td><td>'+(r.locationTo||"")+'</td><td>'+(r.remarks||"")+'</td></tr>';
-    }).join("");
-    return '<div class="card" style="margin-bottom:16px">'+dc+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
-      '<div><span class="badge">Sheet: '+(s.header&&s.header.sheetNo?s.header.sheetNo:"--")+'</span>'+
-      '<span class="badge">'+(s.rows?s.rows.length:0)+' piece(s)</span>'+
-      '<span style="font-size:11px;color:#4a6080">'+(s.timestamp||"")+'</span>'+
-      '<div style="margin-top:5px;font-size:12px;color:#4a6080">&#128119; '+(s.workerName||"--")+' (ID: '+(s.workerId||"--")+') | &#128197; '+(s.header&&s.header.date?s.header.date:"")+' | &#9201; '+(s.header&&s.header.startTime?s.header.startTime:"--")+' - '+(s.header&&s.header.endTime?s.header.endTime:"--")+(s.timeTaken?' | &#128336; '+s.timeTaken:"")+'</div></div>'+
-      '<div style="display:flex;gap:8px"><button class="bx" data-ex="'+s.id+'">&#11015; Excel</button><button class="bd" data-da="'+s.id+'">&#128465;</button></div></div>'+
-      '<div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>#</th><th>Batch No.</th><th>Heat No.</th><th>Strand</th><th>Rolling Size</th><th>Material Type</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
-  }).join("");
+  var stats='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap"><div class="sc"><div style="font-size:22px">&#128203;</div><div style="font-size:22px;font-weight:800;color:#1e3a8a">'+S.sessions.length+'</div><div style="font-size:11px;color:#4a6080">Requests</div></div><div class="sc"><div style="font-size:22px">&#128296;</div><div style="font-size:22px;font-weight:800;color:#1e3a8a">'+tp+'</div><div style="font-size:11px;color:#4a6080">Pieces</div></div></div>';
+  if(S.loading)return topbarS()+'<div class="wrap">'+tabs+stats+'<div class="ebox"><p style="color:#4a6080">Loading...</p></div></div>';
+  if(!S.sessions.length)return topbarS()+'<div class="wrap">'+tabs+stats+'<div class="ebox"><div style="font-size:46px">&#128237;</div><p style="color:#4a6080;margin-top:12px">No requests yet</p></div></div>';
+  var sh=S.sessions.map(function(s){var dc=S.delC===s.id?'<div class="dc"><span style="font-size:13px;color:#dc2626;font-weight:600">Delete permanently?</span><div style="display:flex;gap:8px"><button class="bd" style="padding:7px 14px" data-dc="'+s.id+'">Yes</button><button class="bs" style="padding:7px 14px" id="btnDC">Cancel</button></div></div>':"";var rows=(s.rows||[]).map(function(r,i){return '<tr><td>'+(i+1)+'</td><td style="font-weight:700;color:#1e3a8a">'+(r.batchNo||"")+'</td><td>'+(r.heatNo||"")+'</td><td>'+(r.strand||"")+'</td><td>'+(r.grade||"")+'</td><td>'+(r.length||"")+'</td><td>'+(r.quantity||"")+'</td><td>'+(r.locationFrom||"")+'</td><td>'+(r.locationTo||"")+'</td><td>'+(r.remarks||"")+'</td></tr>';}).join("");return '<div class="card" style="margin-bottom:16px">'+dc+'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><span class="badge">Sheet: '+(s.header&&s.header.sheetNo?s.header.sheetNo:"--")+'</span><span class="badge">'+(s.rows?s.rows.length:0)+' piece(s)</span><div style="margin-top:5px;font-size:12px;color:#4a6080">&#128119; '+(s.workerName||"--")+' | &#128197; '+(s.header&&s.header.date?s.header.date:"")+' | &#9201; '+(s.header&&s.header.startTime?s.header.startTime:"--")+(s.timeTaken?' | &#128336; '+s.timeTaken:"")+'</div></div><div style="display:flex;gap:8px"><button class="bx" data-ex="'+s.id+'">&#11015; Excel</button><button class="bd" data-da="'+s.id+'">&#128465;</button></div></div><div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>#</th><th>Batch No.</th><th>Heat No.</th><th>Strand</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';}).join("");
   return topbarS()+'<div class="wrap">'+tabs+stats+sh+'</div>';
 }
-
-
+function roSupHTML(){
+  if(roAiLoading)return '<div class="card" style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:16px">&#129302;</div><p style="font-size:16px;font-weight:700;color:#1e3a8a;margin:0">AI Reading PDF...</p><p style="font-size:13px;color:#4a6080;margin:8px 0 0">Extracting rolling order data</p></div>';
+  if(roPendingData)return roConfirmHTML();
+  var dw=S.dynamicWorkers||WORKERS;
+  var wo=Object.keys(dw).map(function(id){return '<option value="'+id+'">'+id+' — '+dw[id]+'</option>';}).join('');
+  var ol=roOrders.length===0?'<div class="card" style="text-align:center;padding:30px;color:#4a6080"><div style="font-size:48px;margin-bottom:12px">&#128196;</div><p>No rolling orders yet</p></div>':roOrders.map(function(o){
+    var lots=o.lots||[];var tp=lots.reduce(function(s,l){return s+(l.lengths||[]).reduce(function(s2,ln){return s2+ln.requiredPcs;},0);},0);var dp=lots.reduce(function(s,l){return s+(l.lengths||[]).reduce(function(s2,ln){return s2+(ln.submittedPieces||[]).length;},0);},0);var pct=tp>0?Math.round(dp/tp*100):0;
+    var isExp=S.roExpandedOrder===o.id;
+    var det="";
+    if(isExp){det='<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(30,58,138,0.1)">'+lots.map(function(lot){return '<div style="margin-bottom:12px"><p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0 0 8px">&#128202; '+lot.id+'</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">'+(lot.lengths||[]).map(function(len){var ld=(len.submittedPieces||[]).length;var lr=len.requiredPcs;var ok=ld>=lr;return '<div style="background:'+(ok?'rgba(16,185,129,0.06)':'rgba(30,58,138,0.04)')+';border:1px solid '+(ok?'rgba(16,185,129,0.3)':'rgba(30,58,138,0.12)')+';border-radius:10px;padding:10px"><p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">'+len.length+' m</p><p style="font-size:11px;color:#4a6080;margin:3px 0">'+len.grade+'</p><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><span class="counter-badge '+(ok?'counter-done':ld>lr?'counter-over':'counter-ok')+'">'+ld+'/'+lr+'</span>'+(len.closed?'<button data-ro-reopen="'+o.id+'" data-ro-lot="'+lot.id+'" data-ro-len="'+len.key+'" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:5px;padding:3px 8px;color:#059669;font-size:10px;font-weight:700;cursor:pointer">&#128275; Open</button>':'<button data-ro-close="'+o.id+'" data-ro-lot="'+lot.id+'" data-ro-len="'+len.key+'" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.2);border-radius:5px;padding:3px 8px;color:#dc2626;font-size:10px;font-weight:700;cursor:pointer">&#128274; Close</button>')+'</div>'+((len.submittedPieces||[]).length>0?'<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(30,58,138,0.08)">'+len.submittedPieces.map(function(p,pi){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><p style="font-size:10px;color:#1e3a8a;margin:0;font-weight:600">'+(p.batchNo||"--")+'</p><button data-ro-rm-order="'+o.id+'" data-ro-rm-lot="'+lot.id+'" data-ro-rm-len="'+len.key+'" data-ro-rm-pi="'+pi+'" style="background:rgba(220,38,38,0.1);border:none;border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#10005;</button></div>';}).join('')+'</div>':'')+'</div>';}).join('')+'</div></div>';}).join('')+'<div style="display:flex;gap:8px;margin-top:12px"><button data-ro-delete="'+o.id+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer">&#128465; Delete Order</button></div></div>';}
+    return '<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div><p style="font-weight:800;color:#1e3a8a;font-size:14px;margin:0">&#128196; '+o.finishRollingSize+'</p><p style="font-size:11px;color:#4a6080;margin:4px 0">'+o.date+' | By: '+o.createdBy+'</p><p style="font-size:11px;color:#4a6080;margin:2px 0">Assigned: '+(o.assignedToAll?'All Workers':(o.assignedWorkerName||o.assignedWorkerId||'--'))+'</p></div><div style="display:flex;align-items:center;gap:8px"><div style="text-align:right"><span class="counter-badge '+(pct>=100?'counter-done':'counter-ok')+'">'+dp+'/'+tp+'</span><div style="margin-top:4px;background:#e8edf2;border-radius:10px;height:5px;width:80px;margin-left:auto"><div style="background:'+(pct>=100?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+Math.min(pct,100)+'%"></div></div></div><button data-ro-expand="'+o.id+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:6px 12px;color:#1e3a8a;font-weight:700;font-size:12px;cursor:pointer">'+(isExp?'&#9650; Hide':'&#9660; Details')+'</button></div></div>'+det+'</div>';
+  }).join('');
+  return '<div class="card"><div class="card-title">&#128293; Create Rolling Order</div><label style="background:linear-gradient(135deg,#d97706,#f59e0b);border:none;border-radius:10px;padding:12px 20px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;display:block;text-align:center;margin-bottom:12px">&#128196; Upload Rolling Instruction PDF<input type="file" id="roPdfFile" accept=".pdf" style="display:none"/></label><div><label class="lbl">Assign to Worker</label><select id="roWorkerAssign" style="background:#fff"><option value="all">All Workers</option>'+wo+'</select></div></div>'+ol;
+}
+function roConfirmHTML(){
+  if(!roPendingData)return'';
+  var d=roPendingData;
+  var lotsH=(d.lots||[]).map(function(lot,li){return '<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:12px;margin-bottom:10px"><div class="grid2" style="margin-bottom:8px"><div><label class="lbl">Rolling Lot ID</label><input class="ro-confirm-lot-id" data-li="'+li+'" value="'+(lot.id||"")+'"/></div><div><label class="lbl">Finish Rolling Size</label><input value="'+(d.finishRollingSize||"")+'" readonly/></div></div><div class="grid3"><div><label class="lbl">Grade</label><input class="ro-confirm-grade" data-li="'+li+'" value="'+(lot.grade||"")+'"/></div><div><label class="lbl">Length (m)</label><input class="ro-confirm-length" data-li="'+li+'" value="'+(lot.length||"")+'" inputmode="decimal"/></div><div><label class="lbl">Required Pcs</label><input class="ro-confirm-pcs" data-li="'+li+'" value="'+(lot.requiredPcs||"")+'" inputmode="numeric"/></div></div></div>';}).join('');
+  return '<div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><div style="font-size:32px">&#129302;</div><div><div class="card-title" style="margin:0">AI Extraction Result</div><p style="font-size:12px;color:#4a6080;margin:4px 0 0">Review and edit before saving</p></div></div><div style="margin-bottom:14px"><label class="lbl">Finish Rolling Size</label><input id="roConfirmSize" value="'+(d.finishRollingSize||"")+'"/></div><div class="card-title">Rolling Lots ('+(d.lots||[]).length+')</div>'+lotsH+'<div style="display:flex;gap:10px;margin-top:16px"><button class="bp" id="btnRoConfirm" style="flex:2">&#10003; Save Rolling Order</button><button class="bs" id="btnRoCancel" style="flex:1">&#10006; Cancel</button></div></div>';
+}
+function mappingScreenHTML(){var cols=pendingFileColumns;var rows=FIELD_DEFS.map(function(fd){var det=columnMapping&&columnMapping[fd.key]?columnMapping[fd.key]:"";var isNull=det==="__null__";var isOk=det&&!isNull;var st=isNull?'<span style="color:#6b7280;font-weight:700">&#8709; Skipped</span>':isOk?'<span style="color:#059669;font-weight:700">&#10003; Detected</span>':'<span style="color:#d97706;font-weight:700">&#9888; Not found</span>';var opts=cols.map(function(c){return '<option value="'+c+'"'+(c===det?' selected':'')+'>'+c+'</option>';}).join('');return '<tr><td style="padding:10px 8px;font-weight:700;color:#1e3a8a;font-size:13px">'+fd.label+'</td><td style="padding:10px 8px"><select data-mapkey="'+fd.key+'" style="width:100%;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:8px;color:#1e3a8a;font-size:13px"><option value="">-- Select --</option><option value="__null__"'+(isNull?' selected':'')+' style="color:#6b7280">null — Skip this field</option>'+opts+'</select></td><td style="padding:10px 8px">'+st+'</td></tr>';}).join('');return topbarS()+'<div class="wrap"><div class="card"><div class="card-title">&#128196; Column Mapping</div><p style="font-size:13px;color:#4a6080;margin-bottom:16px">Review detected columns then click Confirm.</p><div style="overflow-x:auto"><table><thead><tr><th>Field</th><th>Column in File</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="display:flex;gap:10px;margin-top:18px"><button class="bp" id="btnConfirmMapping" style="flex:2">&#10003; Confirm & Upload</button><button class="bs" id="btnCancelMapping" style="flex:1">&#10006; Cancel</button></div></div></div>';}
+function adminHTML(){var tab=S.adminTab||"online";var tabDefs=[{key:"online",label:"&#128994; Online"},{key:"remarks",label:"&#128221; Remarks"},{key:"workers",label:"&#128119; Workers"},{key:"supervisors",label:"&#128203; Supervisors"},{key:"settings",label:"&#9881;&#65039; Settings"},{key:"requests",label:"&#128203; Requests"},{key:"stock",label:"&#128230; Stock"},{key:"searchfix",label:"&#128269; Search"}];var tabs='<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">'+tabDefs.map(function(t){var active=tab===t.key;return '<button onclick="ss({adminTab:''+t.key+''})" style="flex:1;min-width:80px;padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:'+(active?'#1e3a8a':'rgba(30,58,138,0.08)')+';color:'+(active?'#fff':'#1e3a8a')+'">'+t.label+'</button>';}).join('')+'</div>';var body='';
+if(tab==="online"){var users=S.onlineUsers||[];var now=Date.now();var cards=users.length===0?'<div style="text-align:center;padding:30px;color:#4a6080">No users online</div>':users.map(function(u){var age=Math.floor((now-u.lastSeen)/1000);var ageStr=age<60?age+"s ago":Math.floor(age/60)+"m ago";return '<div style="display:flex;align-items:center;gap:12px;padding:14px;background:#fff;border-radius:10px;border:1px solid rgba(30,58,138,0.12);margin-bottom:10px"><div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></div><div style="flex:1"><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:14px">'+u.name+'</p><p style="margin:2px 0 0;font-size:11px;color:#4a6080">Login: '+u.loginTime+' | Last: '+u.lastSeenFmt+' ('+ageStr+')</p></div><span style="background:'+(u.role==="Worker"?'rgba(5,150,105,0.1)':'rgba(37,99,235,0.1)')+';color:'+(u.role==="Worker"?'#059669':'#2563eb')+';border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700">'+u.role+'</span></div>';}).join('');body='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="card-title" style="margin:0">Online Users</div><div style="display:flex;gap:8px"><span style="background:rgba(16,185,129,0.15);color:#059669;border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700">'+users.length+' online</span><button id="btnCleanPresence" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:4px 12px;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer">Clean</button></div></div>'+cards+'</div>';}
+if(tab==="remarks"){var ri=remarksOptions.map(function(opt,i){return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px"><span style="flex:1;color:#1e3a8a;font-weight:600">'+opt+'</span><button data-del-remark="'+i+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">&#10005;</button></div>';}).join('');body='<div class="card"><div class="card-title">Remarks</div><input id="newRemark" placeholder="New remark..." style="margin-bottom:8px"/><button class="bp" id="btnAddRemark" style="width:100%;padding:12px">+ Add</button><div style="margin-top:14px;max-height:400px;overflow-y:auto">'+(ri||'<p style="color:#4a6080;text-align:center;padding:20px">No remarks yet.</p>')+'</div></div>';}
+if(tab==="workers"){var dw=S.dynamicWorkers||WORKERS;var wr=Object.keys(dw).sort().map(function(id){return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px"><span style="background:#1e3a8a;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;min-width:40px;text-align:center">'+id+'</span><span style="flex:1;color:#1e3a8a;font-weight:600">'+dw[id]+'</span><button data-del-worker="'+id+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">&#10005;</button></div>';}).join('');body='<div class="card"><div class="card-title">Workers</div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="newWid" placeholder="ID" maxlength="3" style="width:80px;text-align:center;font-weight:700"/><input id="newWname" placeholder="Name" style="flex:1"/></div><button class="bp" id="btnAddWorker" style="width:100%;padding:12px;margin-bottom:14px">+ Add Worker</button><div style="max-height:400px;overflow-y:auto">'+wr+'</div></div>';}
+if(tab==="supervisors"){var sr=Object.keys(dynamicSupervisors).sort().map(function(id){return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px"><span style="background:#2563eb;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;min-width:44px;text-align:center">'+id+'</span><span style="flex:1;color:#1e3a8a;font-weight:600">'+dynamicSupervisors[id]+'</span><button data-del-sup="'+id+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">&#10005;</button></div>';}).join('');body='<div class="card"><div class="card-title">Supervisors</div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="newSid" placeholder="ID" style="width:80px;text-align:center;font-weight:700"/><input id="newSname" placeholder="Name" style="flex:1"/></div><button class="bp" id="btnAddSup" style="width:100%;padding:12px;margin-bottom:14px">+ Add Supervisor</button><div style="max-height:400px;overflow-y:auto">'+sr+'</div></div>';}
+if(tab==="settings"){body='<div class="card"><div class="card-title">Passwords</div>'+['Worker','Supervisor','Admin'].map(function(r){return '<div style="margin-bottom:12px"><label class="lbl">'+r+' Password</label><input id="pw'+r+'" placeholder="New password" type="password" style="font-size:14px;padding:12px"/><button class="bp" id="btnSavePw'+r+'" style="width:100%;padding:12px;margin-top:8px">Save</button></div>';}).join('')+'</div>';}
+if(tab==="requests"||tab==="stock"||tab==="searchfix"){S.supTab=tab==="searchfix"?"search":tab;body=supBody();}
+return topbarS()+'<div class="wrap"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div><p style="font-size:18px;font-weight:800;color:#1e3a8a;margin:0">Admin Panel</p></div><div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:6px 12px;color:#1e3a8a;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="bs" id="btnOut" style="padding:8px 14px;font-size:12px">Sign Out</button></div></div>'+tabs+body+'</div>';}
+function supBody(){var tab=S.supTab||"requests";if(tab==="search"){var sq=searchQuery||"";var res=[];if(sq.length>=2){(S.sessions||[]).forEach(function(s){(s.rows||[]).forEach(function(r,ri){if((r.batchNo&&r.batchNo.toLowerCase().includes(sq.toLowerCase()))||(r.heatNo&&r.heatNo.toLowerCase().includes(sq.toLowerCase()))||(r.strand&&r.strand.toLowerCase().includes(sq.toLowerCase()))){res.push({session:s,row:r,rowIdx:ri});}});});}return '<div class="card"><div class="card-title">Search & Fix</div><input id="searchInput" placeholder="Batch No., Heat No., Strand..." value="'+sq+'"/><div style="margin-top:14px">'+(sq.length<2?'<p style="color:#4a6080;font-size:13px;text-align:center">Enter at least 2 characters</p>':res.length?res.map(function(item){return '<div style="background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><div><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:13px">Batch: '+(item.row.batchNo||"")+'</p><p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(item.row.heatNo||"")+' | Strand: '+(item.row.strand||"")+'</p></div><button data-dc="'+item.session.id+'" data-ridx="'+item.rowIdx+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Remove</button></div></div>';}).join(''):'<p style="color:#4a6080;font-size:13px;text-align:center">No results</p>')+'</div></div>';}if(tab==="stock"){var sc2=Object.keys(stockData).length;var re2=Object.entries(reservedBatches||{});return '<div class="card"><div class="card-title">&#128230; Upload SAP Stock File</div><label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:block;text-align:center;margin-bottom:8px">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label><button class="bs" id="btnClearStock" style="width:100%;padding:10px;margin-top:4px;background:rgba(220,38,38,0.08);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Clear Stock</button><button class="bs" id="btnResetMapping" style="width:100%;padding:10px;margin-top:8px;background:rgba(245,158,11,0.08);color:#d97706;border:1px solid rgba(245,158,11,0.3)">&#128257; Reset Column Mapping</button></div><div class="card"><div class="card-title">&#9881; List Mode</div><div style="display:flex;gap:10px;margin-bottom:12px"><button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button><button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button></div></div>'+(re2.length?'<div class="card"><div class="card-title">&#128274; Active Reservations</div>'+re2.map(function(e){return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px"><span style="flex:1;color:#1e3a8a;font-weight:600;font-size:13px">'+e[0]+'<span style="color:#4a6080;font-size:11px;margin-left:8px">Reserved by '+e[1].workerName+'</span></span><button data-release="'+e[0]+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Release</button></div>';}).join('')+'</div>':'');}
+  if(tab==="requests"){var tp2=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);if(S.loading)return '<div class="card" style="text-align:center;padding:40px"><p style="color:#4a6080">Loading...</p></div>';if(!S.sessions||!S.sessions.length)return '<div class="card" style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px">&#128237;</div><p style="color:#4a6080;font-size:15px">No requests yet</p></div>';return S.sessions.map(function(s){var rows=(s.rows||[]).map(function(r,i){return '<tr><td>'+(i+1)+'</td><td>'+(r.heatNo||'')+'</td><td>'+(r.strand||'')+'</td><td>'+(r.batchNo||'')+'</td><td>'+(r.grade||'')+'</td><td>'+(r.length||'')+'</td><td>'+(r.quantity||'')+'</td><td>'+(r.locationFrom||'')+'</td><td>'+(r.locationTo||'')+'</td><td>'+(r.remarks||'')+'</td></tr>';}).join('');return '<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div><p style="font-weight:800;color:#1e3a8a;font-size:15px;margin:0">'+(s.workerName||'--')+'</p><p style="font-size:12px;color:#4a6080;margin:4px 0 0">'+(s.header&&s.header.date?s.header.date:'')+' | Start: '+(s.header&&s.header.startTime?s.header.startTime:'')+(s.timeTaken?' | '+s.timeTaken:'')+'</p></div><div style="display:flex;gap:8px"><button data-ex="'+s.id+'" class="bx">&#11015; Excel</button><button data-da="'+s.id+'" class="bd">&#128465;</button></div></div><div style="overflow-x:auto;margin-top:10px"><table><thead><tr><th>#</th><th>Heat No.</th><th>Strand</th><th>Batch No.</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';}).join('');}
+  return '';}
 function bind(){
   var bl=document.getElementById("btnLogin");
-  if(bl) bl.onclick=async function(){
-    var u=document.getElementById("iu").value.trim();
-    var p=document.getElementById("ip").value;
-    // Load latest passwords from Firebase before checking
-    await loadPasswords();
-    var c=CREDS[u];
-    if(c&&c.pw===p){
-      if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}
-      else if(c.role==="supervisor"){await loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}
-      else if(c.role==="admin"){await Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]);load();loadStockFromDB();listenReservations();listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}
-    } else document.getElementById("le").style.display="block";
-  };
-  var tp=document.getElementById("tp");
-  if(tp) tp.onclick=function(){var i=document.getElementById("ip");i.type=i.type==="password"?"text":"password";};
-  // Supervisor ID confirm
-  var bsid=document.getElementById("btnSid");
-  if(bsid) bsid.onclick=async function(){
-    var sid=document.getElementById("sid").value.trim().toUpperCase();
-    await loadDynamicSupervisors();
-    var sname=dynamicSupervisors[sid];
-    if(!sname){ss({supervisorIdErr:"ID not found. Please try again."});return;}
-    ss({supervisorStep:false,supervisorId:sid,supervisorName:sname,supervisorIdErr:"",submitted:false,supTab:"requests"});
-    load();loadStockFromDB();listenReservations();
-    registerPresence(sname+' ('+sid+')','Supervisor');
-  };
-
+  if(bl) bl.onclick=async function(){var u=document.getElementById("iu").value.trim();var p=document.getElementById("ip").value;await loadPasswords();var c=CREDS[u];if(c&&c.pw===p){if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}else if(c.role==="supervisor"){await loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}else if(c.role==="admin"){await Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]);load();loadStockFromDB();listenReservations();listenRollingOrders();listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}}else document.getElementById("le").style.display="block";};
+  var tp2=document.getElementById("tp");if(tp2) tp2.onclick=function(){var i=document.getElementById("ip");i.type=i.type==="password"?"text":"password";};
   var bwid=document.getElementById("btnWid");
-  if(bwid) bwid.onclick=async function(){
-    var id=document.getElementById("wid").value.trim().padStart(3,"0");
-    // Load latest workers from Firebase first
-    await loadDynamicWorkers();
-    var dw=S.dynamicWorkers||WORKERS;
-    var name=dw[id];
-    if(!name){ss({workerIdErr:"ID not found."});return;}
-    await loadAllBatchNos();await loadStockFromDB();await loadListMode();
-    listenReservations();startTime=null;
-    registerPresence(name+' ('+id+')','Worker');ss({workerStep:false,workerId:id,workerName:name,workerIdErr:"",submitted:false,rows:[er()],
-      hdr:{sheetNo:"",date:fmtDate(new Date()),operator:name,startTime:"",endTime:""}});
+  if(bwid) bwid.onclick=async function(){var id=document.getElementById("wid").value.trim().padStart(3,"0");await loadDynamicWorkers();var dw=S.dynamicWorkers||WORKERS;var name=dw[id];if(!name){ss({workerIdErr:"ID not found."});return;}await loadAllBatchNos();await loadStockFromDB();await loadListMode();listenReservations();listenRollingOrders();startTime=null;registerPresence(name+' ('+id+')','Worker');ss({workerStep:false,workerId:id,workerName:name,workerIdErr:"",submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:name,startTime:"",endTime:""}});};
+  var bsid=document.getElementById("btnSid");
+  if(bsid) bsid.onclick=async function(){var sid=document.getElementById("sid").value.trim().toUpperCase();await loadDynamicSupervisors();var sname=dynamicSupervisors[sid];if(!sname){ss({supervisorIdErr:"ID not found."});return;}await loadDynamicWorkers();ss({supervisorStep:false,supervisorId:sid,supervisorName:sname,supervisorIdErr:"",submitted:false,supTab:"requests"});load();loadStockFromDB();listenReservations();listenRollingOrders();registerPresence(sname+' ('+sid+')','Supervisor');};
+  var btnRefresh=document.getElementById("btnRefresh");if(btnRefresh) btnRefresh.onclick=async function(){await loadRemarks();await loadStockFromDB();if(S.role==="supervisor"||S.role==="admin"){load();}draw();};
+  var bo=document.getElementById("btnOut");if(bo) bo.onclick=async function(){await removePresence();if(unsubPresence){unsubPresence();unsubPresence=null;}if(unsub)unsub();if(unsubReservations)unsubReservations();if(unsubRO)unsubRO();showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];columnMapping=null;roPendingData=null;roAiLoading=false;roActiveOrder=null;roActiveLot=null;roActiveLength=null;ss({role:null,uname:"",submitted:false,sessions:[],workerStep:false,workerId:"",workerName:"",supervisorStep:false,supervisorId:"",supervisorName:""});};
+  var blogout=document.getElementById("btnLogout");if(blogout) blogout.onclick=async function(){await removePresence();await releaseMyReservations();if(unsub)unsub();if(unsubReservations)unsubReservations();if(unsubRO)unsubRO();roActiveOrder=null;roActiveLot=null;roActiveLength=null;ss({role:null,uname:"",submitted:false,workerStep:false,workerId:"",workerName:"",rows:[er()],logoutMsg:true,roWorkerScreen:false});setTimeout(function(){ss({logoutMsg:false});},4000);};
+  var bback=document.getElementById("btnBackLogin");if(bback) bback.onclick=function(){ss({logoutMsg:false});};
+  var bn=document.getElementById("btnNew");if(bn) bn.onclick=async function(){await releaseMyReservations();startTime=null;await loadAllBatchNos();await loadStockFromDB();ss({submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:"",endTime:""}});};
+  var ba=document.getElementById("btnAdd");if(ba) ba.onclick=function(){ss({rows:S.rows.concat([er()])});};
+  var tabReq=document.getElementById("tabReq");if(tabReq) tabReq.onclick=function(){ss({supTab:"requests"});};
+  var tabRO=document.getElementById("tabRO");if(tabRO) tabRO.onclick=function(){ss({supTab:"rolling"});};
+  var tabStock=document.getElementById("tabStock");if(tabStock) tabStock.onclick=function(){ss({supTab:"stock"});};
+  var tabSearch=document.getElementById("tabSearch");if(tabSearch) tabSearch.onclick=function(){searchQuery="";ss({supTab:"search"});};
+  var si=document.getElementById("searchInput");if(si){si.addEventListener("input",function(e){searchQuery=e.target.value;document.getElementById("app").innerHTML=html();bind();var ns=document.getElementById("searchInput");if(ns){ns.focus();try{ns.setSelectionRange(searchQuery.length,searchQuery.length);}catch(ex){}}});}
+  var btnGoRO=document.getElementById("btnGoRO");if(btnGoRO) btnGoRO.onclick=function(){roActiveOrder=null;roActiveLot=null;roActiveLength=null;ss({roWorkerScreen:true});};
+  var btnRoBack=document.getElementById("btnRoBack");if(btnRoBack) btnRoBack.onclick=function(){ss({roWorkerScreen:false});};
+  var btnRoBackOrder=document.getElementById("btnRoBackOrder");if(btnRoBackOrder) btnRoBackOrder.onclick=function(){roActiveOrder=null;roActiveLot=null;roActiveLength=null;draw();};
+  var btnRoBackLot=document.getElementById("btnRoBackLot");if(btnRoBackLot) btnRoBackLot.onclick=function(){roActiveLot=null;roActiveLength=null;draw();};
+  var btnRoBackLength=document.getElementById("btnRoBackLength");if(btnRoBackLength) btnRoBackLength.onclick=function(){roActiveLength=null;draw();};
+  document.querySelectorAll("[data-ro-order]").forEach(function(b){b.onclick=function(){roActiveOrder=b.dataset.roOrder;roActiveLot=null;roActiveLength=null;draw();};});
+  document.querySelectorAll("[data-ro-lot]").forEach(function(b){if(!b.dataset.roOrder)b.onclick=function(){roActiveLot=b.dataset.roLot;roActiveLength=null;draw();};});
+  document.querySelectorAll("[data-ro-length]").forEach(function(b){b.onclick=function(){roActiveLength=b.dataset.roLength;draw();};});
+  var roH=document.getElementById("ro_heatNo");var roS=document.getElementById("ro_strand");
+  function updRoBatch(){var h=(roH?roH.value:"").trim();var s2=(roS?roS.value:"").trim();var bEl=document.getElementById("ro_batchNo");if(bEl)bEl.value=h+s2;}
+  if(roH)roH.addEventListener("input",updRoBatch);if(roS)roS.addEventListener("input",updRoBatch);
+  var btnRoSub=document.getElementById("btnRoSubmitPiece");
+  if(btnRoSub) btnRoSub.onclick=async function(){
+    var hn=(document.getElementById("ro_heatNo")||{}).value||"";var strand=(document.getElementById("ro_strand")||{}).value||"";var qty=(document.getElementById("ro_qty")||{}).value||"";var locFrom=(document.getElementById("ro_locFrom")||{}).value||"";var remarks=(document.getElementById("ro_remarks")||{}).value||"";
+    if(!hn.trim()){alert("Please enter Heat No.");return;}if(!remarks){alert("Please select a Remark.");return;}
+    var order=roOrders.find(function(o){return o.id===roActiveOrder;});var lot=order?order.lots.find(function(l){return l.id===roActiveLot;}):null;var li=lot?lot.lengths.find(function(l){return l.key===roActiveLength;}):null;if(!li){alert("Length not found.");return;}
+    var newP={heatNo:hn.trim(),strand:strand.trim(),batchNo:hn.trim()+strand.trim(),grade:li.grade,length:li.length,quantity:qty,locationFrom:locFrom,locationTo:"Rolling Mill",remarks:remarks,workerName:S.workerName,workerId:S.workerId,time:fmtTime(new Date()),date:fmtDate(new Date())};
+    await updateRollingOrderPieces(roActiveOrder,roActiveLot,roActiveLength,(li.submittedPieces||[]).concat([newP]));draw();
   };
-  var btnRefresh=document.getElementById("btnRefresh");
-  if(btnRefresh) btnRefresh.onclick=async function(){
-    await loadRemarks();
-    await loadStockFromDB();
-    if(S.role==="supervisor"||S.role==="admin"){load();}
-    draw();
+  var roPdf=document.getElementById("roPdfFile");
+  if(roPdf) roPdf.onchange=async function(e){var file=e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=async function(ev){var b64=ev.target.result.split(",")[1];var extracted=await extractRollingOrderFromPDF(b64);if(extracted){roPendingData=extracted;draw();}};reader.readAsDataURL(file);};
+  var btnRoConfirm=document.getElementById("btnRoConfirm");
+  if(btnRoConfirm) btnRoConfirm.onclick=async function(){
+    var size=(document.getElementById("roConfirmSize")||{}).value||"";if(!size){alert("Please enter Finish Rolling Size.");return;}
+    var lots=[];var lotIds=document.querySelectorAll(".ro-confirm-lot-id");var grades=document.querySelectorAll(".ro-confirm-grade");var lengths=document.querySelectorAll(".ro-confirm-length");var pcss=document.querySelectorAll(".ro-confirm-pcs");
+    for(var i=0;i<lotIds.length;i++){var lid=lotIds[i]?lotIds[i].value.trim():"";var gr=grades[i]?grades[i].value.trim():"";var ln=parseFloat(lengths[i]?lengths[i].value:0)||0;var pc=parseInt(pcss[i]?pcss[i].value:0)||0;if(lid&&gr&&ln&&pc)lots.push({id:lid,grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[]});}
+    if(!lots.length){alert("No valid lots found.");return;}
+    var grouped={};lots.forEach(function(l){if(!grouped[l.id])grouped[l.id]={id:l.id,lengths:[]};grouped[l.id].lengths.push({grade:l.grade,length:l.length,requiredPcs:l.requiredPcs,key:l.key,submittedPieces:[],closed:false});});
+    var finalLots=Object.values(grouped);
+    var waEl=document.getElementById("roWorkerAssign");var assignedTo=waEl?waEl.value:"all";var dw2=S.dynamicWorkers||WORKERS;
+    await saveRollingOrder({finishRollingSize:size,lots:finalLots,assignedToAll:assignedTo==="all",assignedWorkerId:assignedTo!=="all"?assignedTo:null,assignedWorkerName:assignedTo!=="all"?(dw2[assignedTo]||assignedTo):null});
+    roPendingData=null;draw();
   };
-
-  var btnClean=document.getElementById("btnCleanPresence");
-  if(btnClean) btnClean.onclick=async function(){
+  var btnRoCancel=document.getElementById("btnRoCancel");if(btnRoCancel) btnRoCancel.onclick=function(){roPendingData=null;draw();};
+  var btnRoFinal=document.getElementById("btnRoFinalSubmit");
+  if(btnRoFinal) btnRoFinal.onclick=async function(){
+    var order=roOrders.find(function(o){return o.id===roActiveOrder;});
+    var lot=order?order.lots.find(function(l){return l.id===roActiveLot;}):null;
+    var li=lot?lot.lengths.find(function(l){return l.key===roActiveLength;}):null;
+    if(!li||!li.submittedPieces||!li.submittedPieces.length){alert("No pieces to submit.");return;}
+    if(!confirm("Submit "+li.submittedPieces.length+" piece(s) to supervisor?"))return;
+    var endT=new Date();var endStr=fmtTime(endT);
+    var rs=li.submittedPieces.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks,rollingLot:roActiveLot,rollingSize:order.finishRollingSize};});
     try{
-      var snap=await db.collection("presence").get();
-      var now=Date.now();
-      var batch=db.batch();
-      snap.docs.forEach(function(d){
-        var data=d.data();
-        if(!data.lastSeen||(now-data.lastSeen)>45000)batch.delete(d.ref);
+      await db.collection("deliveryNotes").add({
+        header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:li.submittedPieces[0].time||endStr,endTime:endStr},
+        rows:rs,submittedBy:S.uname,workerName:S.workerName,workerId:S.workerId,
+        timeTaken:"N/A",listMode:"rolling",
+        rollingOrderId:roActiveOrder,rollingLot:roActiveLot,
+        createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+        timestamp:new Date().toLocaleString("en-GB")
       });
-      await batch.commit();
-    }catch(e){alert("Error: "+e.message);}
-  };
-
-  var bo=document.getElementById("btnOut");
-  if(bo) bo.onclick=async function(){
-    await removePresence();
-    if(unsubPresence){unsubPresence();unsubPresence=null;}
-    if(unsub)unsub();if(unsubReservations)unsubReservations();
-    showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];columnMapping=null;
-    ss({role:null,uname:"",submitted:false,sessions:[],workerStep:false,workerId:"",workerName:"",supervisorStep:false,supervisorId:"",supervisorName:""});
-  };
-  var blogout=document.getElementById("btnLogout");
-  if(blogout) blogout.onclick=async function(){await removePresence();
-    await releaseMyReservations();
-    if(unsub)unsub();if(unsubReservations)unsubReservations();
-    ss({role:null,uname:"",submitted:false,workerStep:false,workerId:"",workerName:"",rows:[er()],logoutMsg:true});
-    setTimeout(function(){ss({logoutMsg:false});},4000);
-  };
-  var bback=document.getElementById("btnBackLogin");
-  if(bback) bback.onclick=function(){ss({logoutMsg:false});};
-  var bn=document.getElementById("btnNew");
-  if(bn) bn.onclick=async function(){
-    await releaseMyReservations();startTime=null;
-    await loadAllBatchNos();await loadStockFromDB();
-    ss({submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:"",endTime:""}});
-  };
-  var ba=document.getElementById("btnAdd");
-  if(ba) ba.onclick=function(){ss({rows:S.rows.concat([er()])});};
-  var tabReq=document.getElementById("tabReq");
-  if(tabReq) tabReq.onclick=function(){ss({supTab:"requests"});};
-  var tabStock=document.getElementById("tabStock");
-  if(tabStock) tabStock.onclick=function(){ss({supTab:"stock"});};
-  var tabSearch=document.getElementById("tabSearch");
-  if(tabSearch) tabSearch.onclick=function(){searchQuery="";ss({supTab:"search"});};
-
-  // Search input — live search without losing focus
-  var si=document.getElementById("searchInput");
-  if(si){
-    si.addEventListener("input",function(e){
-      searchQuery=e.target.value;
-      var q=searchQuery.trim().toLowerCase();
-      var resultsDiv=document.querySelector(".wrap .card div[style*='margin-top:12px']");
-      // Rebuild only results area
-      document.getElementById("app").innerHTML=html();
-      bind();
-      var newSi=document.getElementById("searchInput");
-      if(newSi){newSi.focus();try{newSi.setSelectionRange(searchQuery.length,searchQuery.length);}catch(ex){}}
-    });
-  }
-
-  var bmo=document.getElementById("btnModeOpen");
-  if(bmo) bmo.onclick=async function(){listMode="open";try{await db.collection("settings").doc("listMode").set({mode:"open"});}catch(e){}draw();};
-  var bmc=document.getElementById("btnModeClosed");
-  if(bmc) bmc.onclick=async function(){listMode="closed";try{await db.collection("settings").doc("listMode").set({mode:"closed"});}catch(e){}draw();};
-
-  var bcs=document.getElementById("btnClearStock");
-  if(bcs) bcs.onclick=async function(){
-    if(!confirm("Clear all stock data?"))return;
-    try{
-      var snap=await db.collection("stock").get();var CHUNK=500;
-      for(var ci=0;ci<snap.docs.length;ci+=CHUNK){
-        var cb=db.batch();snap.docs.slice(ci,ci+CHUNK).forEach(function(d){cb.delete(d.ref);});await cb.commit();
-      }
-      await db.collection("settings").doc("stockMeta").delete();
-      stockData={};stockLastUpdate="";draw();
-    }catch(e){alert("Error clearing stock.");}
-  };
-
-  // Toggle List Mode
-  var btnTM=document.getElementById("btnToggleMode");
-  if(btnTM) btnTM.onclick=async function(){
-    var newMode=listMode==="closed"?"open":"closed";
-    try{
-      await db.collection("settings").doc("listMode").set({mode:newMode});
-      listMode=newMode;draw();
-    }catch(e){alert("Error: "+e.message);}
-  };
-
-  // Reset Column Mapping
-  var btnRM=document.getElementById("btnResetMapping");
-  if(btnRM) btnRM.onclick=async function(){
-    if(!confirm("Reset column mapping? Next upload will ask you to re-select the columns."))return;
-    try{
-      await db.collection("settings").doc("columnMapping").delete();
-      columnMapping=null;
-      alert("\u2705 Column mapping reset successfully.");
-    }catch(e){alert("Error: "+e.message);}
-  };
-
-  var sf=document.getElementById("stockFile");
-  if(sf) sf.onchange=function(e){
-    var file=e.target.files[0];if(!file)return;
-    var reader=new FileReader();
-    reader.onload=async function(ev){
-      try{
-        var wb=XLSX.read(ev.target.result,{type:"binary"});
-        var ws=wb.Sheets[wb.SheetNames[0]];
-        var rows=XLSX.utils.sheet_to_json(ws);
-        if(!rows.length){alert("File is empty.");return;}
-        var cols=Object.keys(rows[0]);
-        pendingFileColumns=cols;pendingUploadRows=rows;
-        await loadColumnMapping();
-        if(columnMapping&&columnMapping.batchNo&&columnMapping.heatNo){
-          var stillValid=columnMapping.batchNo&&cols.includes(columnMapping.batchNo)&&cols.includes(columnMapping.heatNo);
-          if(stillValid){await processUpload(rows,columnMapping);return;}
-        }
-        columnMapping=autoDetectColumns(cols);
-        showMappingScreen=true;draw();
-      }catch(err){alert("Error reading file: "+err.message);}
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  // Column mapping confirm
-  var btnCM=document.getElementById("btnConfirmMapping");
-  if(btnCM) btnCM.onclick=async function(){
-    var nm={};
-    document.querySelectorAll("[data-mapkey]").forEach(function(sel){nm[sel.dataset.mapkey]=sel.value;});
-    if(!nm.batchNo||nm.batchNo==="__null__"){alert("Batch No. is required — cannot be null.");return;}
-    if(!nm.heatNo||nm.heatNo==="__null__"){alert("Heat No. is required — cannot be null.");return;}
-    columnMapping=nm;
-    await processUpload(pendingUploadRows,nm);
-  };
-  var btnCancelM=document.getElementById("btnCancelMapping");
-  if(btnCancelM) btnCancelM.onclick=function(){showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];draw();};
-
-  // Admin handlers
-  var btnAR=document.getElementById("btnAddRemark");
-  if(btnAR) btnAR.onclick=async function(){
-    var val=document.getElementById("newRemark").value.trim();
-    if(!val)return;
-    if(remarksOptions.includes(val)){alert("Already exists.");return;}
-    remarksOptions.push(val);
-    await db.collection("settings").doc("remarks").set({options:remarksOptions});
-    draw();
-  };
-  document.querySelectorAll("[data-del-remark]").forEach(function(btn){
-    btn.onclick=async function(){
-      var i=parseInt(btn.getAttribute("data-del-remark"));
-      if(!confirm("Delete: "+remarksOptions[i]+"?"))return;
-      remarksOptions.splice(i,1);
-      await db.collection("settings").doc("remarks").set({options:remarksOptions});draw();
-    };
-  });
-  var btnAW=document.getElementById("btnAddWorker");
-  if(btnAW) btnAW.onclick=async function(){
-    var wid2=document.getElementById("newWid").value.trim();
-    var wn=document.getElementById("newWname").value.trim();
-    if(!wid2||!wn){alert("Enter both ID and Name.");return;}
-    // Always reload from Firebase first to avoid overwriting
-    await loadDynamicWorkers();
-    var dw2=Object.assign({},S.dynamicWorkers);
-    dw2[wid2]=wn;
-    await db.collection("settings").doc("workers").set({workers:dw2});
-    S.dynamicWorkers=dw2;
-    draw();
-  };
-  document.querySelectorAll("[data-del-worker]").forEach(function(btn){
-    btn.onclick=async function(){
-      var wid3=btn.getAttribute("data-del-worker");
-      if(!confirm("Delete worker "+wid3+"?"))return;
-      await loadDynamicWorkers();
-      var dw3=Object.assign({},S.dynamicWorkers);
-      delete dw3[wid3];
-      await db.collection("settings").doc("workers").set({workers:dw3});
-      S.dynamicWorkers=dw3;
-      draw();
-    };
-  });
-  var btnAS=document.getElementById("btnAddSup");
-  if(btnAS) btnAS.onclick=async function(){
-    var sid2=document.getElementById("newSid").value.trim().toUpperCase();
-    var sn=document.getElementById("newSname").value.trim();
-    if(!sid2||!sn){alert("Enter both ID and Name.");return;}
-    await loadDynamicSupervisors();
-    dynamicSupervisors[sid2]=sn;
-    await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
-    draw();
-  };
-  document.querySelectorAll("[data-del-sup]").forEach(function(btn){
-    btn.onclick=async function(){
-      var sid3=btn.getAttribute("data-del-sup");
-      if(!confirm("Delete supervisor "+sid3+"?"))return;
-      await loadDynamicSupervisors();
-      delete dynamicSupervisors[sid3];
-      await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
-      draw();
-    };
-  });
-  var pwKeys={Worker:"worker",Supervisor:"supervisor",Admin:"admin"};
-  ["Worker","Supervisor","Admin"].forEach(function(r){
-    var btn=document.getElementById("btnSavePw"+r);
-    if(btn) btn.onclick=async function(){
-      var val=document.getElementById("pw"+r).value.trim();
-      if(!val){alert("Password cannot be empty.");return;}
-      try{
-        var update={};update[pwKeys[r]]=val;
-        await db.collection("settings").doc("passwords").set(update,{merge:true});
-        // Update in memory immediately
-        if(r==="Worker")CREDS.Work.pw=val;
-        else if(r==="Supervisor")CREDS.Super.pw=val;
-        else if(r==="Admin")CREDS.Admin.pw=val;
-        document.getElementById("pw"+r).value="";
-        alert("Password updated for "+r+" successfully.");
-      }catch(e){alert("Error: "+e.message);}
-    };
-  });
-
-  document.querySelectorAll("[data-release]").forEach(function(b){
-    b.onclick=async function(e){
-      var batch=e.target.dataset.release;
-      if(!confirm("Release reservation for: "+batch+"?"))return;
-      try{await db.collection("reservations").doc(batch).delete();draw();}catch(ex){alert("Error releasing.");}
-    };
-  });
-
-  // Remove single piece from a session
-  document.querySelectorAll("[data-removebatch]").forEach(function(b){
-    b.onclick=async function(e){
-      var batchToRemove=e.target.dataset.removebatch;
-      var sessionId=e.target.dataset.sessionid;
-      if(!confirm("Remove piece "+batchToRemove+" from this request?\nThis will allow other workers to use this piece."))return;
-      try{
-        var session=S.sessions.find(function(s){return s.id===sessionId;});
-        if(!session)return;
-        var newRows=(session.rows||[]).filter(function(r){return r.batchNo!==batchToRemove;});
-        await db.collection("deliveryNotes").doc(sessionId).update({rows:newRows});
-        allBatchNos.delete(batchToRemove);
-        searchQuery="";
-        alert("Piece "+batchToRemove+" removed successfully. Workers can now use it.");
-        draw();
-      }catch(ex){alert("Error removing piece: "+ex.message);}
-    };
-  });
-
-  document.querySelectorAll(".ri").forEach(function(inp){
-    inp.addEventListener("input",function(e){
-      var i=parseInt(e.target.dataset.r);
-      var f=e.target.dataset.f;
-      S.rows[i][f]=e.target.value;
-      if(f==="heatNo"||f==="strand"){
-        var batch=(S.rows[i].heatNo||"")+(S.rows[i].strand||"");
-        S.rows[i].batchNo=batch;
-        S.rows[i].autoFilled=false;S.rows[i].notFound=false;
-        S.rows[i].alreadySubmitted=false;S.rows[i].reserved=false;S.rows[i].reservedBy="";
-        var dupInRequest=batch&&S.rows.filter(function(r,x){return x!==i&&((r.heatNo||"")+(r.strand||""))===batch;}).length>0;
-        if(dupInRequest){S.rows[i][f]="";S.rows[i].batchNo=(S.rows[i].heatNo||"")+(S.rows[i].strand||"");alert("This piece already exists in this request!");return;}
-        if(batch.length>5){
-          if(allBatchNos.has(batch)) S.rows[i].alreadySubmitted=true;
-          if(reservedBatches[batch]&&reservedBatches[batch].workerId!==S.workerId){S.rows[i].reserved=true;S.rows[i].reservedBy=reservedBatches[batch].workerName;}
-          else if(!allBatchNos.has(batch)) reserveBatch(batch);
-          if(listMode==="closed"){
-            if(stockData[batch]){var item=stockData[batch];S.rows[i].grade=item.grade||"";S.rows[i].length=String(item.length||"");S.rows[i].materialType=item.materialType||"";S.rows[i].locationFrom=item.storageLocation||"";S.rows[i].rollingSize=item.rollingSize||"";S.rows[i].quantity=String(item.availableStock||"");S.rows[i].autoFilled=true;S.rows[i].notFound=false;}
-            else{S.rows[i].autoFilled=false;S.rows[i].notFound=true;}
-          }
-        }
-      }
-      if(!startTime&&e.target.value.trim()){startTime=new Date();S.hdr.startTime=fmtTime(startTime);}
-      if(f==="heatNo"||f==="strand") draw();
-    });
-  });
-
-  document.querySelectorAll("[data-ri]").forEach(function(b){
-    b.onclick=async function(e){
-      var i=parseInt(e.target.dataset.ri);
-      var batch=S.rows[i].batchNo;
-      if(batch&&myReservations.includes(batch)){try{await db.collection("reservations").doc(batch).delete();}catch(ex){}myReservations=myReservations.filter(function(r){return r!==batch;});}
-      ss({rows:S.rows.filter(function(_,x){return x!==i;})});
-    };
-  });
-  document.querySelectorAll("[data-cp]").forEach(function(b){
-    b.onclick=function(e){
-      var i=parseInt(e.target.dataset.cp);
-      var nr=Object.assign({},S.rows[i]);
-      nr.strand="";nr.batchNo="";nr.remarks="";nr.autoFilled=false;nr.notFound=false;nr.alreadySubmitted=false;nr.reserved=false;nr.reservedBy="";
-      ss({rows:S.rows.concat([nr])});
-    };
-  });
-  document.querySelectorAll("[data-cl]").forEach(function(b){
-    b.onclick=async function(e){
-      var i=parseInt(e.target.dataset.cl);
-      var batch=S.rows[i].batchNo;
-      if(batch&&myReservations.includes(batch)){try{await db.collection("reservations").doc(batch).delete();}catch(ex){}myReservations=myReservations.filter(function(r){return r!==batch;});}
-      S.rows[i]=er();draw();
-    };
-  });
-
-  var hs=document.getElementById("hs");
-  if(hs) hs.addEventListener("input",function(e){S.hdr.sheetNo=e.target.value;});
-
-  var bsub=document.getElementById("btnSub");
-  if(bsub) bsub.onclick=async function(){
-    var filled=S.rows.filter(function(r){return r.heatNo&&r.heatNo.trim();});
-    if(!filled.length){alert("Please enter at least one Heat No.");return;}
-    var reserved=filled.filter(function(r){return r.reserved;});
-    if(reserved.length){alert("Reserved by others:\n"+reserved.map(function(r){return r.batchNo+" — "+r.reservedBy;}).join("\n"));return;}
-    var already=filled.filter(function(r){return r.alreadySubmitted&&r.remarks!=="No details";});
-    if(already.length){alert("Already submitted:\n"+already.map(function(r){return r.batchNo;}).join("\n"));return;}
-    var notFound=filled.filter(function(r){return r.notFound&&r.remarks!=="No details";});
-    if(notFound.length&&listMode==="closed"){alert("Not in stock:\n"+notFound.map(function(r){return r.batchNo;}).join("\n")+"\n\nUse 'No details' remark to add pieces not in stock.");return;}
-    var dups=filled.filter(function(r,i){
-      if(r.remarks==="No details")return false;
-      var batch=(r.heatNo||"")+(r.strand||"");
-      return batch&&filled.some(function(r2,j){return j!==i&&r2.remarks!=="No details"&&((r2.heatNo||"")+(r2.strand||""))===batch;});
-    });
-    if(dups.length){alert("Duplicate pieces found:\n"+dups.map(function(r){return (r.heatNo||"")+(r.strand||"");}).join("\n")+"\n\nUse 'No details' remark to allow duplicates.");return;}
-    var endT=new Date();var endStr=fmtTime(endT);var taken=startTime?timeDiff(startTime,endT):"N/A";
-    ss({saving:true});
-    try{
-      var rs=filled.map(function(r){var obj=Object.assign({},r);delete obj.autoFilled;delete obj.notFound;delete obj.alreadySubmitted;delete obj.reserved;delete obj.reservedBy;obj.batchNo=(r.heatNo||"")+(r.strand||"");return obj;});
-      await db.collection("deliveryNotes").add({header:Object.assign({},S.hdr,{endTime:endStr}),rows:rs,submittedBy:S.uname,workerName:S.workerName,workerId:S.workerId,timeTaken:taken,listMode:listMode,createdAt:firebase.firestore.FieldValue.serverTimestamp(),timestamp:new Date().toLocaleString("en-GB")});
       rs.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});
-      await releaseMyReservations();
-      ss({submitted:true,saving:false,timeTaken:taken});
-    }catch(e){alert("Error saving.");ss({saving:false});}
+      alert("✅ Submitted successfully! Supervisor can see it now.");
+      roActiveLength=null;draw();
+    }catch(e){alert("Error submitting: "+e.message);}
   };
-
-  document.querySelectorAll("[data-ex]").forEach(function(b){
-    b.onclick=function(e){var s=S.sessions.find(function(x){return x.id===e.target.dataset.ex;});if(s)xlExport(s);};
-  });
-  document.querySelectorAll("[data-da]").forEach(function(b){
-    b.onclick=function(e){ss({delC:e.target.dataset.da});};
-  });
-  document.querySelectorAll("[data-dc]").forEach(function(b){
-    b.onclick=async function(e){
-      var sid=e.target.dataset.dc;
-      var ridx=e.target.dataset.ridx;
-      if(ridx!==undefined){
-        // Remove single piece from session
-        var session=S.sessions.find(function(x){return x.id===sid;});
-        if(!session)return;
-        if(!confirm("Remove this piece?"))return;
-        var newRows=(session.rows||[]).filter(function(r,i){return i!==parseInt(ridx);});
-        try{
-          await db.collection("deliveryNotes").doc(sid).update({rows:newRows});
-          // Release reservation
-          var removedRow=(session.rows||[])[parseInt(ridx)];
-          if(removedRow&&removedRow.batchNo){
-            try{await db.collection("reservations").doc(removedRow.batchNo).delete();}catch(ex){}
-          }
-          ss({delC:null});
-        }catch(e){alert("Error removing piece.");}
-      } else {
-        // Delete full session
-        if(!confirm("Delete this request permanently?"))return;
-        try{await db.collection("deliveryNotes").doc(sid).delete();ss({delC:null});}catch(e){alert("Error.");}
-      }
-    };
-  });
-  var bdc=document.getElementById("btnDC");
-  if(bdc) bdc.onclick=function(){ss({delC:null});};
+  document.querySelectorAll("[data-ro-expand]").forEach(function(b){b.onclick=function(){ss({roExpandedOrder:S.roExpandedOrder===b.dataset.roExpand?null:b.dataset.roExpand});};});
+  document.querySelectorAll("[data-ro-close]").forEach(function(b){b.onclick=async function(){if(!confirm("Close this length?"))return;await toggleLengthClosed(b.dataset.roClose,b.dataset.roLot,b.dataset.roLen,false);};});
+  document.querySelectorAll("[data-ro-reopen]").forEach(function(b){b.onclick=async function(){await toggleLengthClosed(b.dataset.roReopen,b.dataset.roLot,b.dataset.roLen,true);};});
+  document.querySelectorAll("[data-ro-rm-order]").forEach(function(b){b.onclick=async function(){if(!confirm("Remove this piece?"))return;await removePieceFromRO(b.dataset.roRmOrder,b.dataset.roRmLot,b.dataset.roRmLen,parseInt(b.dataset.roRmPi));};});
+  document.querySelectorAll("[data-ro-sap]").forEach(function(b){b.onclick=function(){xlExportRO(b.dataset.roSap);};});
+  document.querySelectorAll("[data-ro-delete]").forEach(function(b){b.onclick=async function(){if(!confirm("Delete this rolling order permanently?"))return;try{await db.collection("rollingOrders").doc(b.dataset.roDelete).delete();}catch(e){alert("Error: "+e.message);}};});
+  var bmo=document.getElementById("btnModeOpen");if(bmo) bmo.onclick=async function(){listMode="open";try{await db.collection("settings").doc("listMode").set({mode:"open"});}catch(e){}draw();};
+  var bmc=document.getElementById("btnModeClosed");if(bmc) bmc.onclick=async function(){listMode="closed";try{await db.collection("settings").doc("listMode").set({mode:"closed"});}catch(e){}draw();};
+  var bcs=document.getElementById("btnClearStock");if(bcs) bcs.onclick=async function(){if(!confirm("Clear all stock data?"))return;try{var snap=await db.collection("stock").get();var CHUNK=500;for(var ci=0;ci<snap.docs.length;ci+=CHUNK){var cb=db.batch();snap.docs.slice(ci,ci+CHUNK).forEach(function(d){cb.delete(d.ref);});await cb.commit();}await db.collection("settings").doc("stockMeta").delete();stockData={};stockLastUpdate="";draw();}catch(e){alert("Error clearing stock.");}};
+  var btnRM=document.getElementById("btnResetMapping");if(btnRM) btnRM.onclick=async function(){if(!confirm("Reset column mapping?"))return;try{await db.collection("settings").doc("columnMapping").delete();columnMapping=null;alert("\u2705 Reset done.");}catch(e){alert("Error: "+e.message);}};
+  var sf=document.getElementById("stockFile");
+  if(sf) sf.onchange=function(e){var file=e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=async function(ev){try{var wb=XLSX.read(ev.target.result,{type:"binary"});var ws=wb.Sheets[wb.SheetNames[0]];var rows=XLSX.utils.sheet_to_json(ws);if(!rows.length){alert("File is empty.");return;}var cols=Object.keys(rows[0]);pendingFileColumns=cols;pendingUploadRows=rows;await loadColumnMapping();if(columnMapping&&columnMapping.batchNo&&columnMapping.heatNo){var sv=columnMapping.batchNo&&cols.includes(columnMapping.batchNo)&&cols.includes(columnMapping.heatNo);if(sv){await processUpload(rows,columnMapping);return;}}columnMapping=autoDetectColumns(cols);showMappingScreen=true;draw();}catch(err){alert("Error reading file: "+err.message);}};reader.readAsBinaryString(file);};
+  var btnCM=document.getElementById("btnConfirmMapping");if(btnCM) btnCM.onclick=async function(){var nm={};document.querySelectorAll("[data-mapkey]").forEach(function(sel){nm[sel.dataset.mapkey]=sel.value;});if(!nm.batchNo||nm.batchNo==="__null__"){alert("Batch No. is required.");return;}if(!nm.heatNo||nm.heatNo==="__null__"){alert("Heat No. is required.");return;}columnMapping=nm;await processUpload(pendingUploadRows,nm);};
+  var btnCancelM=document.getElementById("btnCancelMapping");if(btnCancelM) btnCancelM.onclick=function(){showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];draw();};
+  var btnClean=document.getElementById("btnCleanPresence");if(btnClean) btnClean.onclick=async function(){try{var snap=await db.collection("presence").get();var now2=Date.now();var b2=db.batch();snap.docs.forEach(function(d){var data=d.data();if(!data.lastSeen||(now2-data.lastSeen)>45000)b2.delete(d.ref);});await b2.commit();}catch(e){alert("Error: "+e.message);}};
+  var btnAR=document.getElementById("btnAddRemark");if(btnAR) btnAR.onclick=async function(){var val=document.getElementById("newRemark").value.trim();if(!val)return;if(remarksOptions.includes(val)){alert("Already exists.");return;}remarksOptions.push(val);await db.collection("settings").doc("remarks").set({options:remarksOptions});draw();};
+  document.querySelectorAll("[data-del-remark]").forEach(function(btn){btn.onclick=async function(){var i=parseInt(btn.getAttribute("data-del-remark"));if(!confirm("Delete: "+remarksOptions[i]+"?"))return;remarksOptions.splice(i,1);await db.collection("settings").doc("remarks").set({options:remarksOptions});draw();};});
+  var btnAW=document.getElementById("btnAddWorker");if(btnAW) btnAW.onclick=async function(){var wid2=document.getElementById("newWid").value.trim();var wn=document.getElementById("newWname").value.trim();if(!wid2||!wn){alert("Enter both ID and Name.");return;}await loadDynamicWorkers();var dw3=Object.assign({},S.dynamicWorkers);dw3[wid2]=wn;await db.collection("settings").doc("workers").set({workers:dw3});S.dynamicWorkers=dw3;draw();};
+  document.querySelectorAll("[data-del-worker]").forEach(function(btn){btn.onclick=async function(){var wid3=btn.getAttribute("data-del-worker");if(!confirm("Delete worker "+wid3+"?"))return;await loadDynamicWorkers();var dw4=Object.assign({},S.dynamicWorkers);delete dw4[wid3];await db.collection("settings").doc("workers").set({workers:dw4});S.dynamicWorkers=dw4;draw();};});
+  var btnAS=document.getElementById("btnAddSup");if(btnAS) btnAS.onclick=async function(){var sid2=document.getElementById("newSid").value.trim().toUpperCase();var sn=document.getElementById("newSname").value.trim();if(!sid2||!sn){alert("Enter both ID and Name.");return;}await loadDynamicSupervisors();dynamicSupervisors[sid2]=sn;await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});draw();};
+  document.querySelectorAll("[data-del-sup]").forEach(function(btn){btn.onclick=async function(){var sid3=btn.getAttribute("data-del-sup");if(!confirm("Delete supervisor "+sid3+"?"))return;await loadDynamicSupervisors();delete dynamicSupervisors[sid3];await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});draw();};});
+  var pwKeys={Worker:"worker",Supervisor:"supervisor",Admin:"admin"};["Worker","Supervisor","Admin"].forEach(function(r){var btn=document.getElementById("btnSavePw"+r);if(btn) btn.onclick=async function(){var val=document.getElementById("pw"+r).value.trim();if(!val){alert("Cannot be empty.");return;}try{var up={};up[pwKeys[r]]=val;await db.collection("settings").doc("passwords").set(up,{merge:true});if(r==="Worker")CREDS.Work.pw=val;else if(r==="Supervisor")CREDS.Super.pw=val;else if(r==="Admin")CREDS.Admin.pw=val;document.getElementById("pw"+r).value="";alert("Password updated.");}catch(e){alert("Error: "+e.message);}};});
+  document.querySelectorAll("[data-release]").forEach(function(b){b.onclick=async function(e){var bt=e.target.dataset.release;if(!confirm("Release reservation for: "+bt+"?"))return;try{await db.collection("reservations").doc(bt).delete();draw();}catch(ex){alert("Error.");}};});
+  document.querySelectorAll("[data-removebatch]").forEach(function(b){b.onclick=async function(e){var btr=e.target.dataset.removebatch;var sid=e.target.dataset.sessionid;if(!confirm("Remove piece "+btr+"?"))return;try{var sess=S.sessions.find(function(s){return s.id===sid;});if(!sess)return;var nr=(sess.rows||[]).filter(function(r){return r.batchNo!==btr;});await db.collection("deliveryNotes").doc(sid).update({rows:nr});allBatchNos.delete(btr);searchQuery="";alert("Removed.");draw();}catch(ex){alert("Error: "+ex.message);}};});
+  document.querySelectorAll(".ri").forEach(function(inp){inp.addEventListener("input",function(e){var i=parseInt(e.target.dataset.r);var f=e.target.dataset.f;S.rows[i][f]=e.target.value;if(f==="heatNo"||f==="strand"){var batch=(S.rows[i].heatNo||"")+(S.rows[i].strand||"");S.rows[i].batchNo=batch;S.rows[i].autoFilled=false;S.rows[i].notFound=false;S.rows[i].alreadySubmitted=false;S.rows[i].reserved=false;S.rows[i].reservedBy="";var dupInReq=batch&&S.rows.filter(function(r,x){return x!==i&&((r.heatNo||"")+(r.strand||""))===batch;}).length>0;if(dupInReq){S.rows[i][f]="";S.rows[i].batchNo=(S.rows[i].heatNo||"")+(S.rows[i].strand||"");alert("This piece already exists in this request!");return;}if(batch.length>5){if(allBatchNos.has(batch))S.rows[i].alreadySubmitted=true;if(reservedBatches[batch]&&reservedBatches[batch].workerId!==S.workerId){S.rows[i].reserved=true;S.rows[i].reservedBy=reservedBatches[batch].workerName;}else if(!allBatchNos.has(batch))reserveBatch(batch);if(listMode==="closed"){if(stockData[batch]){var item=stockData[batch];S.rows[i].grade=item.grade||"";S.rows[i].length=String(item.length||"");S.rows[i].materialType=item.materialType||"";S.rows[i].locationFrom=item.storageLocation||"";S.rows[i].rollingSize=item.rollingSize||"";S.rows[i].quantity=String(item.availableStock||"");S.rows[i].autoFilled=true;S.rows[i].notFound=false;}else{S.rows[i].autoFilled=false;S.rows[i].notFound=true;}}}}if(!startTime&&e.target.value.trim()){startTime=new Date();S.hdr.startTime=fmtTime(startTime);}if(f==="heatNo"||f==="strand")draw();});});
+  document.querySelectorAll("[data-ri]").forEach(function(b){b.onclick=async function(e){var i=parseInt(e.target.dataset.ri);var batch=S.rows[i].batchNo;if(batch&&myReservations.includes(batch)){try{await db.collection("reservations").doc(batch).delete();}catch(ex){}myReservations=myReservations.filter(function(r){return r!==batch;});}ss({rows:S.rows.filter(function(_,x){return x!==i;})});};});
+  document.querySelectorAll("[data-cp]").forEach(function(b){b.onclick=function(e){var i=parseInt(e.target.dataset.cp);var nr=Object.assign({},S.rows[i]);nr.strand="";nr.batchNo="";nr.remarks="";nr.autoFilled=false;nr.notFound=false;nr.alreadySubmitted=false;nr.reserved=false;nr.reservedBy="";ss({rows:S.rows.concat([nr])});};});
+  document.querySelectorAll("[data-cl]").forEach(function(b){b.onclick=async function(e){var i=parseInt(e.target.dataset.cl);var batch=S.rows[i].batchNo;if(batch&&myReservations.includes(batch)){try{await db.collection("reservations").doc(batch).delete();}catch(ex){}myReservations=myReservations.filter(function(r){return r!==batch;});}S.rows[i]=er();draw();};});
+  var hs=document.getElementById("hs");if(hs) hs.addEventListener("input",function(e){S.hdr.sheetNo=e.target.value;});
+  var bsub=document.getElementById("btnSub");
+  if(bsub) bsub.onclick=async function(){var filled=S.rows.filter(function(r){return r.heatNo&&r.heatNo.trim();});if(!filled.length){alert("Please enter at least one Heat No.");return;}var reserved=filled.filter(function(r){return r.reserved;});if(reserved.length){alert("Reserved by others:\n"+reserved.map(function(r){return r.batchNo+" — "+r.reservedBy;}).join("\n"));return;}var already=filled.filter(function(r){return r.alreadySubmitted&&r.remarks!=="No details";});if(already.length){alert("Already submitted:\n"+already.map(function(r){return r.batchNo;}).join("\n"));return;}var notFound=filled.filter(function(r){return r.notFound&&r.remarks!=="No details";});if(notFound.length&&listMode==="closed"){alert("Not in stock:\n"+notFound.map(function(r){return r.batchNo;}).join("\n"));return;}var dups=filled.filter(function(r,i){if(r.remarks==="No details")return false;var batch=(r.heatNo||"")+(r.strand||"");return batch&&filled.some(function(r2,j){return j!==i&&r2.remarks!=="No details"&&((r2.heatNo||"")+(r2.strand||""))===batch;});});if(dups.length){alert("Duplicates:\n"+dups.map(function(r){return (r.heatNo||"")+(r.strand||"");}).join("\n"));return;}var endT=new Date();var endStr=fmtTime(endT);var taken=startTime?timeDiff(startTime,endT):"N/A";ss({saving:true});try{var rs=filled.map(function(r){var obj=Object.assign({},r);delete obj.autoFilled;delete obj.notFound;delete obj.alreadySubmitted;delete obj.reserved;delete obj.reservedBy;obj.batchNo=(r.heatNo||"")+(r.strand||"");return obj;});await db.collection("deliveryNotes").add({header:Object.assign({},S.hdr,{endTime:endStr}),rows:rs,submittedBy:S.uname,workerName:S.workerName,workerId:S.workerId,timeTaken:taken,listMode:listMode,createdAt:firebase.firestore.FieldValue.serverTimestamp(),timestamp:new Date().toLocaleString("en-GB")});rs.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});await releaseMyReservations();ss({submitted:true,saving:false,timeTaken:taken});}catch(e){alert("Error saving.");ss({saving:false});}};
+  document.querySelectorAll("[data-ex]").forEach(function(b){b.onclick=function(e){var s=S.sessions.find(function(x){return x.id===e.target.dataset.ex;});if(s)xlExport(s);};});
+  document.querySelectorAll("[data-da]").forEach(function(b){b.onclick=function(e){ss({delC:e.target.dataset.da});};});
+  document.querySelectorAll("[data-dc]").forEach(function(b){b.onclick=async function(e){var sid=e.target.dataset.dc;var ridx=e.target.dataset.ridx;if(ridx!==undefined){var sess=S.sessions.find(function(x){return x.id===sid;});if(!sess)return;if(!confirm("Remove this piece?"))return;var nr=(sess.rows||[]).filter(function(r,i){return i!==parseInt(ridx);});try{await db.collection("deliveryNotes").doc(sid).update({rows:nr});var rr=(sess.rows||[])[parseInt(ridx)];if(rr&&rr.batchNo){try{await db.collection("reservations").doc(rr.batchNo).delete();}catch(ex){}}ss({delC:null});}catch(e){alert("Error.");}}else{if(!confirm("Delete request permanently?"))return;try{await db.collection("deliveryNotes").doc(sid).delete();ss({delC:null});}catch(e){alert("Error.");}}};});
+  var bdc=document.getElementById("btnDC");if(bdc) bdc.onclick=function(){ss({delC:null});};
 }
-
-function load(){
-  ss({loading:true});
-  unsub=db.collection("deliveryNotes").orderBy("createdAt","desc").onSnapshot(function(snap){
-    ss({sessions:snap.docs.map(function(d){return Object.assign({id:d.id},d.data());}),loading:false});
-  });
-}
-
-function xlExport(s){
-  var wb=XLSX.utils.book_new();
-  var workerName=(s.workerName||"Worker").replace(/\s+/g,"_");
-  var sheetNo=s.header&&s.header.sheetNo?s.header.sheetNo:"";
-  var dateStr=s.header&&s.header.date?s.header.date.replace(/-/g,""):"";
-  var fileName="DeliveryNote_"+workerName+(sheetNo?""+sheetNo:"")+(dateStr?""+dateStr:"")+".xlsx";
-  var ws=XLSX.utils.aoa_to_sheet([
-    ["DELIVERY NOTE - SULB Company | MS Logistics"],[],
-    ["Sheet No.",sheetNo,"","Date:",s.header?s.header.date:""],
-    ["Operator:",s.workerName||"","","ID:",s.workerId||""],
-    ["Start Time:",s.header?s.header.startTime:"","","End Time:",s.header?s.header.endTime:""],
-    ["Time Taken:",s.timeTaken||""],
-    [],
-    ["Sr.","Batch No.","Heat No.","Strand","Rolling Size","Material Type","Rolling Lot","Grade","Length","Qty (MT)","From","To","Remarks"],
-    ...(s.rows||[]).map(function(r,i){return [i+1,r.batchNo,r.heatNo,r.strand,r.rollingSize,r.materialType,r.rollingLot,r.grade,r.length,r.quantity,r.locationFrom,r.locationTo,r.remarks];})
-  ]);
-  ws["!cols"]=[5,14,12,10,18,14,16,10,8,10,10,10,16].map(function(w){return {wch:w};});
-  XLSX.utils.book_append_sheet(wb,ws,"Delivery Note");
-  XLSX.writeFile(wb,fileName);
-}
-
-// ── Async loaders ──────────────────────────────────────────
-async function loadPasswords(){
-  try{
-    var doc=await db.collection("settings").doc("passwords").get();
-    if(doc.exists){
-      var data=doc.data();
-      if(data.worker) CREDS.Work.pw=data.worker;
-      if(data.supervisor) CREDS.Super.pw=data.supervisor;
-      if(data.admin) CREDS.Admin.pw=data.admin;
-    }
-  }catch(e){}
-}
-
-async function loadRemarks(){
-  try{var doc=await db.collection("settings").doc("remarks").get();
-    remarksOptions=doc.exists?(doc.data().options||remarksOptions):remarksOptions;
-  }catch(e){}
-}
-
-async function loadColumnMapping(){
-  try{var doc=await db.collection("settings").doc("columnMapping").get();
-    if(doc.exists)columnMapping=doc.data().mapping||null;
-  }catch(e){}
-}
-
-async function loadDynamicWorkers(){
-  try{
-    var doc=await db.collection("settings").doc("workers").get();
-    if(doc.exists&&doc.data().workers){
-      // Read from Firebase only — no merge with defaults
-      S.dynamicWorkers=doc.data().workers;
-    } else {
-      // First time — save defaults to Firebase
-      S.dynamicWorkers=Object.assign({},WORKERS);
-      await db.collection("settings").doc("workers").set({workers:S.dynamicWorkers});
-    }
-  }catch(e){S.dynamicWorkers=Object.assign({},WORKERS);}
-}
-
-async function loadDynamicSupervisors(){
-  try{
-    var doc=await db.collection("settings").doc("supervisors").get();
-    if(doc.exists&&doc.data().supervisors){
-      // Read from Firebase only — no merge with defaults
-      dynamicSupervisors=doc.data().supervisors;
-    } else {
-      // First time — save defaults to Firebase
-      dynamicSupervisors=Object.assign({},SUPERVISORS);
-      await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});
-    }
-  }catch(e){dynamicSupervisors=Object.assign({},SUPERVISORS);}
-}
-
-// ── Presence ───────────────────────────────────────────────
-async function registerPresence(name,role){
-  try{
-    // Restore presenceId from sessionStorage if exists
-    if(!presenceId)presenceId=sessionStorage.getItem('presenceId');
-    if(!presenceId){presenceId=Date.now().toString(36)+Math.random().toString(36).slice(2);sessionStorage.setItem('presenceId',presenceId);}
-    await db.collection("presence").doc(presenceId).set({
-      name:name,role:role,
-      loginTime:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}),
-      lastSeen:Date.now(),
-      lastSeenFmt:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})
-    });
-    if(presenceInterval)clearInterval(presenceInterval);
-    presenceInterval=setInterval(async function(){
-      try{await db.collection("presence").doc(presenceId).update({
-        lastSeen:Date.now(),
-        lastSeenFmt:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})
-      });}catch(e){}
-    },30000);
-  }catch(e){}
-}
-
-async function removePresence(){
-  if(presenceInterval){clearInterval(presenceInterval);presenceInterval=null;}
-  // Try to get presenceId from sessionStorage if not in memory
-  if(!presenceId)presenceId=sessionStorage.getItem('presenceId');
-  if(!presenceId)return;
-  try{await db.collection("presence").doc(presenceId).delete();}catch(e){}
-  presenceId=null;
-  sessionStorage.removeItem('presenceId');
-}
-
-let unsubPresence=null;
-function listenPresence(){
-  if(unsubPresence)unsubPresence();
-  unsubPresence=db.collection("presence").onSnapshot(function(snap){
-    var users=[];var now=Date.now();
-    snap.docs.forEach(function(d){
-      var data=d.data();
-      if(data.lastSeen&&(now-data.lastSeen)<45000)users.push(data);
-    });
-    users.sort(function(a,b){return b.lastSeen-a.lastSeen;});
-    ss({onlineUsers:users});
-  });
-}
-
-// ── Stock upload ───────────────────────────────────────────
-async function processUpload(rows,mapping){
-  try{
-    var items={};
-    function getField(key,row,mapping){
-      var col=mapping[key];
-      if(!col||col==="__null__")return "";
-      return String(row[col]||"");
-    }
-    rows.forEach(function(row){
-      var bk=String(row[mapping.batchNo]||"").trim();
-      var heat=String(row[mapping.heatNo]||"").trim();
-      var strand=bk&&heat?bk.replace(heat,""):"";
-      if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,
-        rollingSize:getField("rollingSize",row,mapping),
-        grade:getField("grade",row,mapping),
-        length:getField("length",row,mapping),
-        materialType:getField("materialType",row,mapping),
-        availableStock:mapping.availableStock&&mapping.availableStock!=="__null__"?parseFloat(row[mapping.availableStock]||0):0,
-        storageLocation:getField("storageLocation",row,mapping),
-        storageBin:getField("storageBin",row,mapping)};
-    });
-    var updatedAt=new Date().toLocaleString("en-GB");
-    var keys=Object.keys(items);var CHUNK=500;
-    // Delete old
-    var oldSnap=await db.collection("stock").get();
-    for(var i=0;i<oldSnap.docs.length;i+=CHUNK){
-      var db1=db.batch();
-      oldSnap.docs.slice(i,i+CHUNK).forEach(function(d){db1.delete(d.ref);});
-      await db1.commit();
-    }
-    // Write new
-    for(var j=0;j<keys.length;j+=CHUNK){
-      var db2=db.batch();
-      keys.slice(j,j+CHUNK).forEach(function(k){
-        db2.set(db.collection("stock").doc(k.replace(/[/]/g,"_")),items[k]);
-      });
-      await db2.commit();
-    }
-    await db.collection("settings").doc("stockMeta").set({updatedAt:updatedAt});
-    await db.collection("settings").doc("columnMapping").set({mapping:mapping,savedAt:updatedAt});
-    stockData=items;stockLastUpdate=updatedAt;
-    showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];
-    alert("Stock uploaded! "+keys.length+" pieces loaded.");draw();
-  }catch(err){alert("Error saving stock: "+err.message);}
-}
-
-// ── HTML screens ───────────────────────────────────────────
-function supervisorIdHTML(){
-  return topbarLogin()+
-    '<div class="wrap" style="max-width:420px">'+
-    '<div style="text-align:center;margin:32px 0 24px">'+
-      '<div style="font-size:52px;margin-bottom:10px">&#128203;</div>'+
-      '<h2 style="color:#1e3a8a;margin:0 0 6px">Supervisor ID</h2>'+
-      '<p style="color:#4a6080;font-size:13px">Enter your supervisor ID</p>'+
-    '</div>'+
-    '<div class="card">'+
-      '<label class="lbl">Supervisor ID</label>'+
-      '<input id="sid" placeholder="e.g. S01" style="font-size:24px;text-align:center;letter-spacing:8px;padding:14px"/>'+
-      (S.supervisorIdErr?'<p style="color:#dc2626;font-size:12px;margin-top:8px;text-align:center">'+S.supervisorIdErr+'</p>':'')+
-      '<button class="bp" id="btnSid" style="margin-top:14px">Confirm</button>'+
-    '</div></div>';
-}
-
-function mappingScreenHTML(){
-  var cols=pendingFileColumns;
-  var rows=FIELD_DEFS.map(function(fd){
-    var det=columnMapping&&columnMapping[fd.key]?columnMapping[fd.key]:"";
-    var isNull=det==="__null__";
-    var isDetected=det&&!isNull;
-    var status=isNull?'<span style="color:#6b7280;font-weight:700">&#8709; Skipped</span>':
-               isDetected?'<span style="color:#059669;font-weight:700">&#10003; Detected</span>':
-               '<span style="color:#d97706;font-weight:700">&#9888; Not found</span>';
-    var opts=cols.map(function(c){return '<option value="'+c+'"'+(c===det?' selected':'')+'>'+c+'</option>';}).join('');
-    var nullSelected=isNull?' selected':'';
-    return '<tr><td style="padding:10px 8px;font-weight:700;color:#1e3a8a;font-size:13px">'+fd.label+'</td>'+
-      '<td style="padding:10px 8px"><select data-mapkey="'+fd.key+'" style="width:100%;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:8px;color:#1e3a8a;font-size:13px">'+
-      '<option value="">-- Select --</option>'+
-      '<option value="__null__"'+nullSelected+' style="color:#6b7280">null — Skip this field</option>'+
-      opts+'</select></td>'+
-      '<td style="padding:10px 8px">'+status+'</td></tr>';
-  }).join('');
-  return topbarS()+
-    '<div class="wrap"><div class="card">'+
-    '<div class="card-title">&#128196; Column Mapping</div>'+
-    '<p style="font-size:13px;color:#4a6080;margin-bottom:16px">Review detected columns then click Confirm.</p>'+
-    '<div style="overflow-x:auto"><table><thead><tr><th>Field</th><th>Column in File</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '<div style="display:flex;gap:10px;margin-top:18px">'+
-      '<button class="bp" id="btnConfirmMapping" style="flex:2">&#10003; Confirm & Upload</button>'+
-      '<button class="bs" id="btnCancelMapping" style="flex:1">&#10006; Cancel</button>'+
-    '</div></div></div>';
-}
-
-function adminHTML(){
-  var tab=S.adminTab||"online";
-  var tabDefs=[
-    {key:"online",label:"🟢 Online"},
-    {key:"remarks",label:"📝 Remarks"},
-    {key:"workers",label:"👷 Workers"},
-    {key:"supervisors",label:"📋 Supervisors"},
-    {key:"settings",label:"⚙️ Settings"},
-    {key:"requests",label:"📋 Requests"},
-    {key:"stock",label:"📦 Stock"},
-    {key:"searchfix",label:"🔍 Search & Fix"}
-  ];
-  var tabs='<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">'+
-    tabDefs.map(function(t){
-      var active=tab===t.key;
-      return '<button onclick="ss({adminTab:\'' +t.key+ '\'})" style="flex:1;min-width:80px;padding:9px 4px;border-radius:10px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:'+(active?'#1e3a8a':'rgba(30,58,138,0.08)')+';color:'+(active?'#fff':'#1e3a8a')+'">'+t.label+'</button>';
-    }).join('')+'</div>';
-
-  var body='';
-
-  if(tab==="online"){
-    var users=S.onlineUsers||[];var now=Date.now();
-    var cards=users.length===0?'<div style="text-align:center;padding:30px;color:#4a6080">🔴 No users online</div>':
-      users.map(function(u){
-        var age=Math.floor((now-u.lastSeen)/1000);
-        var ageStr=age<60?age+"s ago":Math.floor(age/60)+"m ago";
-        var isW=u.role==="Worker";
-        return '<div style="display:flex;align-items:center;gap:12px;padding:14px;background:#fff;border-radius:10px;border:1px solid rgba(30,58,138,0.12);margin-bottom:10px">'+
-          '<div style="width:10px;height:10px;border-radius:50%;background:#10b981;flex-shrink:0"></div>'+
-          '<div style="flex:1"><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:14px">'+u.name+'</p>'+
-          '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Login: '+u.loginTime+' | Last seen: '+u.lastSeenFmt+' ('+ageStr+')</p></div>'+
-          '<span style="background:'+(isW?'rgba(5,150,105,0.1)':'rgba(37,99,235,0.1)')+';color:'+(isW?'#059669':'#2563eb')+';border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700">'+u.role+'</span>'+
-        '</div>';
-      }).join('');
-    body='<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="card-title" style="margin:0">🟢 Online Users</div><span style="background:rgba(16,185,129,0.15);color:#059669;border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700">'+users.length+' online</span></div>'+cards+'</div>';
-  }
-
-  if(tab==="remarks"){
-    var ritems=remarksOptions.map(function(opt,i){
-      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
-        '<span style="flex:1;color:#1e3a8a;font-weight:600">'+opt+'</span>'+
-        '<button data-del-remark="'+i+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">✕</button>'+
-      '</div>';
-    }).join('');
-    body='<div class="card"><div class="card-title">📝 Remarks List</div>'+
-      '<div style="margin-bottom:16px"><input id="newRemark" placeholder="e.g. Transfer to Yard" style="margin-bottom:8px"/><button class="bp" id="btnAddRemark" style="width:100%;padding:12px">+ Add</button></div>'+
-      '<div style="max-height:400px;overflow-y:auto">'+(ritems||'<p style="color:#4a6080;text-align:center;padding:20px">No remarks yet.</p>')+'</div></div>';
-  }
-
-  if(tab==="workers"){
-    var dw=S.dynamicWorkers||WORKERS;
-    var wrows=Object.keys(dw).sort().map(function(id){
-      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
-        '<span style="background:#1e3a8a;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;min-width:40px;text-align:center">'+id+'</span>'+
-        '<span style="flex:1;color:#1e3a8a;font-weight:600">'+dw[id]+'</span>'+
-        '<button data-del-worker="'+id+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">✕</button>'+
-      '</div>';
-    }).join('');
-    body='<div class="card"><div class="card-title">👷 Workers</div>'+
-      '<div style="margin-bottom:16px"><div style="display:flex;gap:8px;margin-bottom:8px"><input id="newWid" placeholder="ID e.g. 018" maxlength="3" style="width:90px;text-align:center;font-weight:700"/><input id="newWname" placeholder="Worker Name" style="flex:1"/></div><button class="bp" id="btnAddWorker" style="width:100%;padding:12px">+ Add</button></div>'+
-      '<div style="max-height:400px;overflow-y:auto">'+wrows+'</div></div>';
-  }
-
-  if(tab==="supervisors"){
-    var srows2=Object.keys(dynamicSupervisors).sort().map(function(id){
-      return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px">'+
-        '<span style="background:#2563eb;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;min-width:44px;text-align:center">'+id+'</span>'+
-        '<span style="flex:1;color:#1e3a8a;font-weight:600">'+dynamicSupervisors[id]+'</span>'+
-        '<button data-del-sup="'+id+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">✕</button>'+
-      '</div>';
-    }).join('');
-    body='<div class="card"><div class="card-title">📋 Supervisors</div>'+
-      '<div style="margin-bottom:16px"><div style="display:flex;gap:8px;margin-bottom:8px"><input id="newSid" placeholder="ID e.g. S03" style="width:90px;text-align:center;font-weight:700"/><input id="newSname" placeholder="Supervisor Name" style="flex:1"/></div><button class="bp" id="btnAddSup" style="width:100%;padding:12px">+ Add</button></div>'+
-      '<div style="max-height:400px;overflow-y:auto">'+srows2+'</div></div>';
-  }
-
-  if(tab==="settings"){
-    body='<div class="card"><div class="card-title">⚙️ Passwords</div>'+
-      ['Worker','Supervisor','Admin'].map(function(r){
-        return '<div style="margin-bottom:12px"><label class="lbl">'+r+' Password</label><div style="display:block"><input id="pw'+r+'" placeholder="Enter new password" type="password" style="flex:1;font-size:14px;padding:12px"/><button class="bp" id="btnSavePw'+r+'" style="width:100%;padding:12px;margin-top:8px">Save</button></div></div>';
-      }).join('')+'</div>';
-  }
-
-  // Supervisor tabs inside Admin
-  if(tab==="requests"||tab==="stock"||tab==="searchfix"){
-    S.supTab=tab;
-    body=supBody();
-  }
-
-  return topbarS()+
-    '<div class="wrap">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
-      '<div><p style="font-size:18px;font-weight:800;color:#1e3a8a;margin:0">Admin Panel</p><p style="font-size:12px;color:#4a6080;margin:0">System Administration</p></div>'+
-      '<div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="bs" id="btnOut" style="padding:8px 14px;font-size:12px">Sign Out</button></div>'+
-    '</div>'+tabs+body+'</div>';
-}
-
-function topbarLogin(){
-  return '<div class="topbar"><div style="display:flex;flex-direction:column;align-items:center"><img src="'+LOGO+'" class="logo-img" alt="SULB"/><p class="logo-txt">MS LOGISTICS</p></div><div><p style="font-size:16px;font-weight:800;color:#fff;margin:0">Delivery Note System</p><p style="font-size:11px;color:rgba(255,255,255,0.65);margin:0">SULB Company</p></div></div>';
-}
-
+function load(){ss({loading:true});unsub=db.collection("deliveryNotes").orderBy("createdAt","desc").onSnapshot(function(snap){ss({sessions:snap.docs.map(function(d){return Object.assign({id:d.id},d.data());}),loading:false});});}
+async function loadPasswords(){try{var doc=await db.collection("settings").doc("passwords").get();if(doc.exists){var data=doc.data();if(data.worker)CREDS.Work.pw=data.worker;if(data.supervisor)CREDS.Super.pw=data.supervisor;if(data.admin)CREDS.Admin.pw=data.admin;}}catch(e){}}
+async function loadRemarks(){try{var doc=await db.collection("settings").doc("remarks").get();remarksOptions=doc.exists?(doc.data().options||remarksOptions):remarksOptions;}catch(e){}}
+async function loadColumnMapping(){try{var doc=await db.collection("settings").doc("columnMapping").get();if(doc.exists)columnMapping=doc.data().mapping||null;}catch(e){}}
+async function loadDynamicWorkers(){try{var doc=await db.collection("settings").doc("workers").get();if(doc.exists&&doc.data().workers){S.dynamicWorkers=doc.data().workers;}else{S.dynamicWorkers=Object.assign({},WORKERS);await db.collection("settings").doc("workers").set({workers:S.dynamicWorkers});}}catch(e){S.dynamicWorkers=Object.assign({},WORKERS);}}
+async function loadDynamicSupervisors(){try{var doc=await db.collection("settings").doc("supervisors").get();if(doc.exists&&doc.data().supervisors){dynamicSupervisors=doc.data().supervisors;}else{dynamicSupervisors=Object.assign({},SUPERVISORS);await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});}}catch(e){dynamicSupervisors=Object.assign({},SUPERVISORS);}}
+async function registerPresence(name,role){try{if(!presenceId)presenceId=sessionStorage.getItem('presenceId');if(!presenceId){presenceId=Date.now().toString(36)+Math.random().toString(36).slice(2);sessionStorage.setItem('presenceId',presenceId);}await db.collection("presence").doc(presenceId).set({name:name,role:role,loginTime:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}),lastSeen:Date.now(),lastSeenFmt:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})});if(presenceInterval)clearInterval(presenceInterval);presenceInterval=setInterval(async function(){try{await db.collection("presence").doc(presenceId).update({lastSeen:Date.now(),lastSeenFmt:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})});}catch(e){}},30000);}catch(e){}}
+async function removePresence(){if(presenceInterval){clearInterval(presenceInterval);presenceInterval=null;}if(!presenceId)presenceId=sessionStorage.getItem('presenceId');if(!presenceId)return;try{await db.collection("presence").doc(presenceId).delete();}catch(e){}presenceId=null;sessionStorage.removeItem('presenceId');}
+function listenPresence(){if(unsubPresence)unsubPresence();unsubPresence=db.collection("presence").onSnapshot(function(snap){var users=[];var now=Date.now();snap.docs.forEach(function(d){var data=d.data();if(data.lastSeen&&(now-data.lastSeen)<45000)users.push(data);});users.sort(function(a,b){return b.lastSeen-a.lastSeen;});ss({onlineUsers:users});});}
+async function processUpload(rows,mapping){try{var items={};function getField(key,row,mp){var col=mp[key];if(!col||col==="__null__")return "";return String(row[col]||"");}rows.forEach(function(row){var bk=String(row[mapping.batchNo]||"").trim();var heat=String(row[mapping.heatNo]||"").trim();var strand=bk&&heat?bk.replace(heat,""):"";if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,rollingSize:getField("rollingSize",row,mapping),grade:getField("grade",row,mapping),length:getField("length",row,mapping),materialType:getField("materialType",row,mapping),availableStock:mapping.availableStock&&mapping.availableStock!=="__null__"?parseFloat(row[mapping.availableStock]||0):0,storageLocation:getField("storageLocation",row,mapping),storageBin:getField("storageBin",row,mapping)};});var upd=new Date().toLocaleString("en-GB");var keys=Object.keys(items);var CHUNK=500;var oldSnap=await db.collection("stock").get();for(var i=0;i<oldSnap.docs.length;i+=CHUNK){var db1=db.batch();oldSnap.docs.slice(i,i+CHUNK).forEach(function(d){db1.delete(d.ref);});await db1.commit();}for(var j=0;j<keys.length;j+=CHUNK){var db2=db.batch();keys.slice(j,j+CHUNK).forEach(function(k){db2.set(db.collection("stock").doc(k.replace(/[/]/g,"_")),items[k]);});await db2.commit();}await db.collection("settings").doc("stockMeta").set({updatedAt:upd});await db.collection("settings").doc("columnMapping").set({mapping:mapping,savedAt:upd});stockData=items;stockLastUpdate=upd;showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];alert("Stock uploaded! "+keys.length+" pieces.");draw();}catch(err){alert("Error: "+err.message);}}
+function xlExport(s){var wb=XLSX.utils.book_new();var wn=(s.workerName||"Worker").replace(/\s+/g,"_");var sn=s.header&&s.header.sheetNo?s.header.sheetNo:"";var dt=s.header&&s.header.date?s.header.date.replace(/-/g,""):"";var supN=(S.supervisorName||"").replace(/\s+/g,"_");var fn="DeliveryNote_"+wn+(sn?"_"+sn:"")+(dt?"_"+dt:"")+(supN?"_"+supN:"")+".xlsx";var ws=XLSX.utils.aoa_to_sheet([["DELIVERY NOTE - SULB Company | MS Logistics"],[],["Sheet No.",sn,"","Date:",s.header?s.header.date:""],["Operator:",s.workerName||"","","ID:",s.workerId||""],["Start:",s.header?s.header.startTime:"","","End:",s.header?s.header.endTime:""],["Duration:",s.timeTaken||""],[],["Sr.","Batch No.","Heat No.","Strand","Rolling Size","Material Type","Grade","Length","Qty (MT)","From","To","Remarks"],...(s.rows||[]).map(function(r,i){return [i+1,r.batchNo,r.heatNo,r.strand,r.rollingSize,r.materialType,r.grade,r.length,r.quantity,r.locationFrom,r.locationTo,r.remarks];})]);ws["!cols"]=[5,14,12,10,18,14,10,8,10,10,10,16].map(function(w){return {wch:w};});XLSX.utils.book_append_sheet(wb,ws,"Delivery Note");XLSX.writeFile(wb,fn);}
+function xlExportRO(orderId){var order=roOrders.find(function(o){return o.id===orderId;});if(!order){alert("Order not found.");return;}var wb=XLSX.utils.book_new();var rows=[["ROLLING ORDER — SAP Export | SULB MS Logistics"],[],["Rolling Size:",order.finishRollingSize,"","Date:",order.date,"","By:",order.createdBy],[],["Sr.","Rolling Lot","Grade","Length (m)","Required Pcs","Submitted","Remaining","Heat No.","Strand","Batch No.","Qty (MT)","From","Remarks","Worker","Time"]];var sr=1;(order.lots||[]).forEach(function(lot){(lot.lengths||[]).forEach(function(len){var sub=len.submittedPieces||[];var rem=Math.max(0,len.requiredPcs-sub.length);if(sub.length===0){rows.push([sr++,lot.id,len.grade,len.length,len.requiredPcs,0,len.requiredPcs,"","","","","","","",""]);}else{sub.forEach(function(p,pi){rows.push([pi===0?sr++:"",pi===0?lot.id:"",pi===0?len.grade:"",pi===0?len.length:"",pi===0?len.requiredPcs:"",pi===0?sub.length:"",pi===0?rem:"",p.heatNo||"",p.strand||"",p.batchNo||"",p.quantity||"",p.locationFrom||"",p.remarks||"",p.workerName||"",p.time||""]);});}});});var ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[5,16,12,10,12,12,10,12,10,14,8,10,14,14,10].map(function(w){return {wch:w};});XLSX.utils.book_append_sheet(wb,ws,"Rolling Order");XLSX.writeFile(wb,"RollingOrder_"+order.finishRollingSize.replace(/[^a-zA-Z0-9_]/g,"_")+"_"+(order.date||"").replace(/-/g,"")+".xlsx");}
 draw();
-
-
 </script>
 </body>
 </html>
