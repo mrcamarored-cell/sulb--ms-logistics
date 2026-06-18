@@ -105,7 +105,7 @@ async function saveRollingOrder(orderData){try{var ref=await db.collection("roll
 async function updateRollingOrderPieces(orderId,lotId,lengthKey,newPieces){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=newPieces;li.closed=(newPieces.length>=li.requiredPcs);await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
 async function toggleLengthClosed(orderId,lotId,lengthKey,forceOpen){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.closed=forceOpen?false:!li.closed;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
 async function removePieceFromRO(orderId,lotId,lengthKey,pieceIdx){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=(li.submittedPieces||[]).filter(function(_,i){return i!==pieceIdx;});if(li.submittedPieces.length<li.requiredPcs)li.closed=false;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
-async function extractRollingOrderFromPDF(base64Data){roAiLoading=true;draw();try{var resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64Data}},{type:"text",text:'Extract rolling order data from this PDF. Return ONLY valid JSON no markdown no backticks. Format: {"finishRollingSize":"UB406X178_54.1","lots":[{"id":"101040123188","grade":"S355JR","length":12.0,"requiredPcs":6,"key":"S355JR_12.0"}]} For each row: id=Rolling Lot column, grade=finished Grade, length=finished Length, requiredPcs=Sch.Pcs (or Ord.Pcs). key=grade+"_"+length. Skip rows where Pcs=0. Include all sections.'}]}]})});var data=await resp.json();var text=(data.content||[]).map(function(c){return c.text||"";}).join("").replace(/```json|```/g,"").trim();var parsed=JSON.parse(text);roAiLoading=false;return parsed;}catch(e){roAiLoading=false;alert("AI extraction failed: "+e.message);return null;}}
+
 function ss(u){Object.assign(S,u);draw();}
 function draw(){var active=document.activeElement;var aid=active?active.id:null;var adr=active?active.dataset.r:null;var adf=active?active.dataset.f:null;var ac=active&&active.selectionStart!=null?active.selectionStart:null;document.getElementById("app").innerHTML=html();bind();if(aid){var el=document.getElementById(aid);if(el){el.focus();if(ac!=null){try{el.setSelectionRange(ac,ac);}catch(e){}}}}else if(adr!=null&&adf!=null){var inputs=document.querySelectorAll(".ri");for(var i=0;i<inputs.length;i++){if(inputs[i].dataset.r===adr&&inputs[i].dataset.f===adf){inputs[i].focus();if(ac!=null){try{inputs[i].setSelectionRange(ac,ac);}catch(e){}}break;}}}}
 function html(){if(S.logoutMsg)return logoutHTML();if(!S.role)return loginHTML();if(S.role==="worker"&&S.workerStep)return workerIdHTML();if(S.role==="worker"&&S.roWorkerScreen)return roWorkerHTML();if(S.role==="worker")return workerHTML();if(S.role==="supervisor"&&S.supervisorStep)return supervisorIdHTML();if(S.role==="supervisor"&&showMappingScreen)return mappingScreenHTML();if(S.role==="supervisor")return supHTML();if(S.role==="admin"&&showMappingScreen)return mappingScreenHTML();if(S.role==="admin")return adminHTML();return loginHTML();}
@@ -177,7 +177,6 @@ function supHTML(){
   return topbarS()+'<div class="wrap">'+tabs+stats+sh+'</div>';
 }
 function roSupHTML(){
-  if(roAiLoading)return '<div class="card" style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:16px">&#129302;</div><p style="font-size:16px;font-weight:700;color:#1e3a8a;margin:0">AI Reading PDF...</p><p style="font-size:13px;color:#4a6080;margin:8px 0 0">Extracting rolling order data</p></div>';
   if(roPendingData)return roConfirmHTML();
   var dw=S.dynamicWorkers||WORKERS;
   var wo=Object.keys(dw).map(function(id){return '<option value="'+id+'">'+id+' — '+dw[id]+'</option>';}).join('');
@@ -188,7 +187,25 @@ function roSupHTML(){
     if(isExp){det='<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(30,58,138,0.1)">'+lots.map(function(lot){return '<div style="margin-bottom:12px"><p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0 0 8px">&#128202; '+lot.id+'</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">'+(lot.lengths||[]).map(function(len){var ld=(len.submittedPieces||[]).length;var lr=len.requiredPcs;var ok=ld>=lr;return '<div style="background:'+(ok?'rgba(16,185,129,0.06)':'rgba(30,58,138,0.04)')+';border:1px solid '+(ok?'rgba(16,185,129,0.3)':'rgba(30,58,138,0.12)')+';border-radius:10px;padding:10px"><p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">'+len.length+' m</p><p style="font-size:11px;color:#4a6080;margin:3px 0">'+len.grade+'</p><div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px"><span class="counter-badge '+(ok?'counter-done':ld>lr?'counter-over':'counter-ok')+'">'+ld+'/'+lr+'</span>'+(len.closed?'<button data-ro-reopen="'+o.id+'" data-ro-lot="'+lot.id+'" data-ro-len="'+len.key+'" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:5px;padding:3px 8px;color:#059669;font-size:10px;font-weight:700;cursor:pointer">&#128275; Open</button>':'<button data-ro-close="'+o.id+'" data-ro-lot="'+lot.id+'" data-ro-len="'+len.key+'" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.2);border-radius:5px;padding:3px 8px;color:#dc2626;font-size:10px;font-weight:700;cursor:pointer">&#128274; Close</button>')+'</div>'+((len.submittedPieces||[]).length>0?'<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(30,58,138,0.08)">'+len.submittedPieces.map(function(p,pi){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0"><p style="font-size:10px;color:#1e3a8a;margin:0;font-weight:600">'+(p.batchNo||"--")+'</p><button data-ro-rm-order="'+o.id+'" data-ro-rm-lot="'+lot.id+'" data-ro-rm-len="'+len.key+'" data-ro-rm-pi="'+pi+'" style="background:rgba(220,38,38,0.1);border:none;border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#10005;</button></div>';}).join('')+'</div>':'')+'</div>';}).join('')+'</div></div>';}).join('')+'<div style="display:flex;gap:8px;margin-top:12px"><button data-ro-delete="'+o.id+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer">&#128465; Delete Order</button></div></div>';}
     return '<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div><p style="font-weight:800;color:#1e3a8a;font-size:14px;margin:0">&#128196; '+o.finishRollingSize+'</p><p style="font-size:11px;color:#4a6080;margin:4px 0">'+o.date+' | By: '+o.createdBy+'</p><p style="font-size:11px;color:#4a6080;margin:2px 0">Assigned: '+(o.assignedToAll?'All Workers':(o.assignedWorkerName||o.assignedWorkerId||'--'))+'</p></div><div style="display:flex;align-items:center;gap:8px"><div style="text-align:right"><span class="counter-badge '+(pct>=100?'counter-done':'counter-ok')+'">'+dp+'/'+tp+'</span><div style="margin-top:4px;background:#e8edf2;border-radius:10px;height:5px;width:80px;margin-left:auto"><div style="background:'+(pct>=100?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+Math.min(pct,100)+'%"></div></div></div><button data-ro-expand="'+o.id+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:6px 12px;color:#1e3a8a;font-weight:700;font-size:12px;cursor:pointer">'+(isExp?'&#9650; Hide':'&#9660; Details')+'</button></div></div>'+det+'</div>';
   }).join('');
-  return '<div class="card"><div class="card-title">&#128293; Create Rolling Order</div><label style="background:linear-gradient(135deg,#d97706,#f59e0b);border:none;border-radius:10px;padding:12px 20px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;display:block;text-align:center;margin-bottom:12px">&#128196; Upload Rolling Instruction PDF<input type="file" id="roPdfFile" accept=".pdf" style="display:none"/></label><div><label class="lbl">Assign to Worker</label><select id="roWorkerAssign" style="background:#fff"><option value="all">All Workers</option>'+wo+'</select></div></div>'+ol;
+  return '<div class="card"><div class="card-title">&#128293; Create Rolling Order</div>'+
+    '<div style="margin-bottom:12px"><label class="lbl">Finish Rolling Size</label><input id="roNewSize" placeholder="e.g. UB406X178_54.1"/></div>'+
+    '<div style="margin-bottom:12px"><label class="lbl">Assign to Worker</label><select id="roWorkerAssign" style="background:#fff"><option value="all">All Workers</option>'+wo+'</select></div>'+
+    '<div id="roLotsContainer">'+
+      '<div class="ro-manual-lot" data-lot-idx="0">'+
+        '<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:12px;margin-bottom:10px">'+
+        '<p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0 0 10px">&#128202; Rolling Lot #1</p>'+
+        '<div style="margin-bottom:8px"><label class="lbl">Rolling Lot ID</label><input class="ro-lot-id" placeholder="e.g. 101040123172"/></div>'+
+        '<div class="grid3">'+
+          '<div><label class="lbl">Grade</label><input class="ro-lot-grade" placeholder="e.g. S355JR"/></div>'+
+          '<div><label class="lbl">Length (m)</label><input class="ro-lot-length" placeholder="e.g. 12.0" inputmode="decimal"/></div>'+
+          '<div><label class="lbl">Required Pcs</label><input class="ro-lot-pcs" placeholder="e.g. 6" inputmode="numeric"/></div>'+
+        '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<button id="btnRoAddLot" style="background:rgba(59,130,246,0.06);border:1px dashed rgba(59,130,246,0.4);border-radius:10px;padding:10px;color:#3b82f6;font-weight:600;font-size:13px;width:100%;margin-bottom:12px">+ Add Another Lot</button>'+
+    '<button class="bp" id="btnRoSaveManual">&#10003; Save Rolling Order</button>'+
+    '</div>'+ol;
 }
 function roConfirmHTML(){
   if(!roPendingData)return'';
@@ -222,6 +239,7 @@ function bind(){
   var bback=document.getElementById("btnBackLogin");if(bback) bback.onclick=function(){ss({logoutMsg:false});};
   var bn=document.getElementById("btnNew");if(bn) bn.onclick=async function(){await releaseMyReservations();startTime=null;await loadAllBatchNos();await loadStockFromDB();ss({submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:"",endTime:""}});};
   var ba=document.getElementById("btnAdd");if(ba) ba.onclick=function(){ss({rows:S.rows.concat([er()])});};
+  document.querySelectorAll(".ro-remove-lot").forEach(function(b){b.onclick=function(){b.closest(".ro-manual-lot").remove();};});
   document.querySelectorAll("[data-admintab]").forEach(function(b){b.onclick=function(){ss({adminTab:b.dataset.admintab});};});
   var tabReq=document.getElementById("tabReq");if(tabReq) tabReq.onclick=function(){ss({supTab:"requests"});};
   var tabRO=document.getElementById("tabRO");if(tabRO) tabRO.onclick=function(){ss({supTab:"rolling"});};
@@ -247,21 +265,60 @@ function bind(){
     var newP={heatNo:hn.trim(),strand:strand.trim(),batchNo:hn.trim()+strand.trim(),grade:li.grade,length:li.length,quantity:qty,locationFrom:locFrom,locationTo:"Rolling Mill",remarks:remarks,workerName:S.workerName,workerId:S.workerId,time:fmtTime(new Date()),date:fmtDate(new Date())};
     await updateRollingOrderPieces(roActiveOrder,roActiveLot,roActiveLength,(li.submittedPieces||[]).concat([newP]));draw();
   };
-  var roPdf=document.getElementById("roPdfFile");
-  if(roPdf) roPdf.onchange=async function(e){var file=e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=async function(ev){var b64=ev.target.result.split(",")[1];var extracted=await extractRollingOrderFromPDF(b64);if(extracted){roPendingData=extracted;draw();}};reader.readAsDataURL(file);};
-  var btnRoConfirm=document.getElementById("btnRoConfirm");
-  if(btnRoConfirm) btnRoConfirm.onclick=async function(){
-    var size=(document.getElementById("roConfirmSize")||{}).value||"";if(!size){alert("Please enter Finish Rolling Size.");return;}
-    var lots=[];var lotIds=document.querySelectorAll(".ro-confirm-lot-id");var grades=document.querySelectorAll(".ro-confirm-grade");var lengths=document.querySelectorAll(".ro-confirm-length");var pcss=document.querySelectorAll(".ro-confirm-pcs");
-    for(var i=0;i<lotIds.length;i++){var lid=lotIds[i]?lotIds[i].value.trim():"";var gr=grades[i]?grades[i].value.trim():"";var ln=parseFloat(lengths[i]?lengths[i].value:0)||0;var pc=parseInt(pcss[i]?pcss[i].value:0)||0;if(lid&&gr&&ln&&pc)lots.push({id:lid,grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[]});}
-    if(!lots.length){alert("No valid lots found.");return;}
-    var grouped={};lots.forEach(function(l){if(!grouped[l.id])grouped[l.id]={id:l.id,lengths:[]};grouped[l.id].lengths.push({grade:l.grade,length:l.length,requiredPcs:l.requiredPcs,key:l.key,submittedPieces:[],closed:false});});
+
+  // Manual rolling order save
+  var btnRoSaveManual=document.getElementById("btnRoSaveManual");
+  if(btnRoSaveManual) btnRoSaveManual.onclick=async function(){
+    var size=(document.getElementById("roNewSize")||{}).value.trim();
+    if(!size){alert("Please enter Finish Rolling Size.");return;}
+    var lotIds=document.querySelectorAll(".ro-lot-id");
+    var grades=document.querySelectorAll(".ro-lot-grade");
+    var lengths=document.querySelectorAll(".ro-lot-length");
+    var pcss=document.querySelectorAll(".ro-lot-pcs");
+    var lots=[];
+    for(var i=0;i<lotIds.length;i++){
+      var lid=lotIds[i]?lotIds[i].value.trim():"";
+      var gr=grades[i]?grades[i].value.trim():"";
+      var ln=parseFloat(lengths[i]?lengths[i].value:0)||0;
+      var pc=parseInt(pcss[i]?pcss[i].value:0)||0;
+      if(lid&&gr&&ln&&pc)lots.push({id:lid,grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[]});
+    }
+    if(!lots.length){alert("Please fill at least one lot with all fields.");return;}
+    var grouped={};
+    lots.forEach(function(l){
+      if(!grouped[l.id])grouped[l.id]={id:l.id,lengths:[]};
+      grouped[l.id].lengths.push({grade:l.grade,length:l.length,requiredPcs:l.requiredPcs,key:l.key,submittedPieces:[],closed:false});
+    });
     var finalLots=Object.values(grouped);
-    var waEl=document.getElementById("roWorkerAssign");var assignedTo=waEl?waEl.value:"all";var dw2=S.dynamicWorkers||WORKERS;
+    var waEl=document.getElementById("roWorkerAssign");
+    var assignedTo=waEl?waEl.value:"all";
+    var dw2=S.dynamicWorkers||WORKERS;
     await saveRollingOrder({finishRollingSize:size,lots:finalLots,assignedToAll:assignedTo==="all",assignedWorkerId:assignedTo!=="all"?assignedTo:null,assignedWorkerName:assignedTo!=="all"?(dw2[assignedTo]||assignedTo):null});
-    roPendingData=null;draw();
+    alert("\u2705 Rolling Order saved!");draw();
   };
-  var btnRoCancel=document.getElementById("btnRoCancel");if(btnRoCancel) btnRoCancel.onclick=function(){roPendingData=null;draw();};
+  // Add lot row
+  var btnRoAddLot=document.getElementById("btnRoAddLot");
+  if(btnRoAddLot) btnRoAddLot.onclick=function(){
+    var container=document.getElementById("roLotsContainer");
+    if(!container)return;
+    var idx=container.querySelectorAll(".ro-manual-lot").length;
+    var div=document.createElement("div");
+    div.className="ro-manual-lot";
+    div.dataset.lotIdx=idx;
+    div.innerHTML='<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:12px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+      '<p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0">&#128202; Rolling Lot #'+(idx+1)+'</p>'+
+      '<button class="ro-remove-lot" style="background:rgba(220,38,38,0.1);border:none;border-radius:6px;padding:4px 10px;color:#dc2626;font-size:12px;cursor:pointer">&#10005;</button>'+
+      '</div>'+
+      '<div style="margin-bottom:8px"><label class="lbl">Rolling Lot ID</label><input class="ro-lot-id" placeholder="e.g. 101040123177"/></div>'+
+      '<div class="grid3">'+
+        '<div><label class="lbl">Grade</label><input class="ro-lot-grade" placeholder="e.g. S355JR"/></div>'+
+        '<div><label class="lbl">Length (m)</label><input class="ro-lot-length" placeholder="e.g. 12.0" inputmode="decimal"/></div>'+
+        '<div><label class="lbl">Required Pcs</label><input class="ro-lot-pcs" placeholder="e.g. 6" inputmode="numeric"/></div>'+
+      '</div>'+
+      '</div>';
+    container.appendChild(div);
+  };
   var btnRoFinal=document.getElementById("btnRoFinalSubmit");
   if(btnRoFinal) btnRoFinal.onclick=async function(){
     var order=roOrders.find(function(o){return o.id===roActiveOrder;});
@@ -332,7 +389,7 @@ async function removePresence(){if(presenceInterval){clearInterval(presenceInter
 function listenPresence(){if(unsubPresence)unsubPresence();unsubPresence=db.collection("presence").onSnapshot(function(snap){var users=[];var now=Date.now();snap.docs.forEach(function(d){var data=d.data();if(data.lastSeen&&(now-data.lastSeen)<45000)users.push(data);});users.sort(function(a,b){return b.lastSeen-a.lastSeen;});ss({onlineUsers:users});});}
 async function processUpload(rows,mapping){try{var items={};function getField(key,row,mp){var col=mp[key];if(!col||col==="__null__")return "";return String(row[col]||"");}rows.forEach(function(row){var bk=String(row[mapping.batchNo]||"").trim();var heat=String(row[mapping.heatNo]||"").trim();var strand=bk&&heat?bk.replace(heat,""):"";if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,rollingSize:getField("rollingSize",row,mapping),grade:getField("grade",row,mapping),length:getField("length",row,mapping),materialType:getField("materialType",row,mapping),availableStock:mapping.availableStock&&mapping.availableStock!=="__null__"?parseFloat(row[mapping.availableStock]||0):0,storageLocation:getField("storageLocation",row,mapping),storageBin:getField("storageBin",row,mapping)};});var upd=new Date().toLocaleString("en-GB");var keys=Object.keys(items);var CHUNK=500;var oldSnap=await db.collection("stock").get();for(var i=0;i<oldSnap.docs.length;i+=CHUNK){var db1=db.batch();oldSnap.docs.slice(i,i+CHUNK).forEach(function(d){db1.delete(d.ref);});await db1.commit();}for(var j=0;j<keys.length;j+=CHUNK){var db2=db.batch();keys.slice(j,j+CHUNK).forEach(function(k){db2.set(db.collection("stock").doc(k.replace(/[/]/g,"_")),items[k]);});await db2.commit();}await db.collection("settings").doc("stockMeta").set({updatedAt:upd});await db.collection("settings").doc("columnMapping").set({mapping:mapping,savedAt:upd});stockData=items;stockLastUpdate=upd;showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];alert("Stock uploaded! "+keys.length+" pieces.");draw();}catch(err){alert("Error: "+err.message);}}
 function xlExport(s){var wb=XLSX.utils.book_new();var wn=(s.workerName||"Worker").replace(/\s+/g,"_");var sn=s.header&&s.header.sheetNo?s.header.sheetNo:"";var dt=s.header&&s.header.date?s.header.date.replace(/-/g,""):"";var supN=(S.supervisorName||"").replace(/\s+/g,"_");var fn="DeliveryNote_"+wn+(sn?"_"+sn:"")+(dt?"_"+dt:"")+(supN?"_"+supN:"")+".xlsx";var ws=XLSX.utils.aoa_to_sheet([["DELIVERY NOTE - SULB Company | MS Logistics"],[],["Sheet No.",sn,"","Date:",s.header?s.header.date:""],["Operator:",s.workerName||"","","ID:",s.workerId||""],["Start:",s.header?s.header.startTime:"","","End:",s.header?s.header.endTime:""],["Duration:",s.timeTaken||""],[],["Sr.","Batch No.","Heat No.","Strand","Rolling Size","Material Type","Grade","Length","Qty (MT)","From","To","Remarks"],...(s.rows||[]).map(function(r,i){return [i+1,r.batchNo,r.heatNo,r.strand,r.rollingSize,r.materialType,r.grade,r.length,r.quantity,r.locationFrom,r.locationTo,r.remarks];})]);ws["!cols"]=[5,14,12,10,18,14,10,8,10,10,10,16].map(function(w){return {wch:w};});XLSX.utils.book_append_sheet(wb,ws,"Delivery Note");XLSX.writeFile(wb,fn);}
-function xlExportRO(orderId){var order=roOrders.find(function(o){return o.id===orderId;});if(!order){alert("Order not found.");return;}var wb=XLSX.utils.book_new();var rows=[["ROLLING ORDER — SAP Export | SULB MS Logistics"],[],["Rolling Size:",order.finishRollingSize,"","Date:",order.date,"","By:",order.createdBy],[],["Sr.","Rolling Lot","Grade","Length (m)","Required Pcs","Submitted","Remaining","Heat No.","Strand","Batch No.","Qty (MT)","From","Remarks","Worker","Time"]];var sr=1;(order.lots||[]).forEach(function(lot){(lot.lengths||[]).forEach(function(len){var sub=len.submittedPieces||[];var rem=Math.max(0,len.requiredPcs-sub.length);if(sub.length===0){rows.push([sr++,lot.id,len.grade,len.length,len.requiredPcs,0,len.requiredPcs,"","","","","","","",""]);}else{sub.forEach(function(p,pi){rows.push([pi===0?sr++:"",pi===0?lot.id:"",pi===0?len.grade:"",pi===0?len.length:"",pi===0?len.requiredPcs:"",pi===0?sub.length:"",pi===0?rem:"",p.heatNo||"",p.strand||"",p.batchNo||"",p.quantity||"",p.locationFrom||"",p.remarks||"",p.workerName||"",p.time||""]);});}});});var ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[5,16,12,10,12,12,10,12,10,14,8,10,14,14,10].map(function(w){return {wch:w};});XLSX.utils.book_append_sheet(wb,ws,"Rolling Order");XLSX.writeFile(wb,"RollingOrder_"+order.finishRollingSize.replace(/[^a-zA-Z0-9_]/g,"_")+"_"+(order.date||"").replace(/-/g,"")+".xlsx");}
+
 draw();
 </script>
 </body>
