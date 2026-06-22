@@ -367,72 +367,73 @@ function bind(){
     draw();
   };
 
-  // Manual rolling order save
+  // Event delegation للـ rolling order form
+  var roCard=document.getElementById("roSectionsContainer");
+  if(roCard){
+    roCard.addEventListener("click",function(e){
+      var t=e.target;
+      if(t.classList.contains("ro-add-lot")){
+        var sec=t.closest(".ro-section");if(!sec)return;
+        var wrap=sec.querySelector(".ro-lots-wrap");
+        var lIdx=wrap.querySelectorAll(".ro-lot").length;
+        var tmp=document.createElement("div");
+        tmp.innerHTML=roLotHTML(lIdx);
+        wrap.appendChild(tmp.firstChild);
+      }
+      if(t.classList.contains("ro-remove-lot")){
+        var lot=t.closest(".ro-lot");if(lot)lot.remove();
+      }
+      if(t.classList.contains("ro-remove-section")){
+        var sec2=t.closest(".ro-section");if(sec2)sec2.remove();
+      }
+    });
+  }
+  var btnRoAddSection=document.getElementById("btnRoAddSection");
+  if(btnRoAddSection) btnRoAddSection.onclick=function(){
+    var container=document.getElementById("roSectionsContainer");if(!container)return;
+    var sIdx=container.querySelectorAll(".ro-section").length;
+    var tmp=document.createElement("div");
+    tmp.innerHTML=roSectionHTML(sIdx);
+    container.appendChild(tmp.firstChild);
+  };
   var btnRoSaveManual=document.getElementById("btnRoSaveManual");
   if(btnRoSaveManual) btnRoSaveManual.onclick=async function(){
-    var sections=document.querySelectorAll(".ro-manual-lot");
-    var lotIds=document.querySelectorAll(".ro-lot-id");
-    var grades=document.querySelectorAll(".ro-lot-grade");
-    var lengths=document.querySelectorAll(".ro-lot-length");
-    var pcss=document.querySelectorAll(".ro-lot-pcs");
-    var sizes=document.querySelectorAll(".ro-lot-size");
     var waEl=document.getElementById("roWorkerAssign");
     var assignedTo=waEl?waEl.value:"all";
     var dw2=S.dynamicWorkers||WORKERS;
     var assignedWorkerId=assignedTo!=="all"?assignedTo:null;
     var assignedWorkerName=assignedTo!=="all"?(dw2[assignedTo]||assignedTo):null;
+    var sections=document.querySelectorAll("#roSectionsContainer .ro-section");
     if(!sections.length){alert("Please add at least one section.");return;}
-    // نجمع كل section كـ rolling order منفصل
-    var orders=[];
-    for(var i=0;i<sections.length;i++){
-      var sz=sizes[i]?sizes[i].value.trim():"";
-      var lid=lotIds[i]?lotIds[i].value.trim():"";
-      var gr=grades[i]?grades[i].value.trim():"";
-      var ln=parseFloat(lengths[i]?lengths[i].value:0)||0;
-      var pc=parseInt(pcss[i]?pcss[i].value:0)||0;
-      if(!sz){alert("Section #"+(i+1)+": Please enter Finish Rolling Size.");return;}
-      if(!lid||!gr||!ln||!pc){alert("Section #"+(i+1)+": Please fill all fields.");return;}
-      // ابحث إذا كان نفس الـ size موجود
-      var existing=orders.find(function(o){return o.finishRollingSize===sz;});
-      if(existing){
-        // أضف lot لنفس الـ order
-        var existingLot=existing.lots.find(function(l){return l.id===lid;});
+    var orders=[];var valid=true;
+    sections.forEach(function(sec,si){
+      if(!valid)return;
+      var sz=(sec.querySelector(".ro-sec-size")||{}).value||"";sz=sz.trim();
+      if(!sz){alert("Section #"+(si+1)+": Please enter Finish Rolling Size.");valid=false;return;}
+      var lotDivs=sec.querySelectorAll(".ro-lot");
+      if(!lotDivs.length){alert("Section #"+(si+1)+": No lots found.");valid=false;return;}
+      var lots=[];
+      lotDivs.forEach(function(lotDiv,li){
+        if(!valid)return;
+        var lid=(lotDiv.querySelector(".ro-lot-id")||{}).value||"";lid=lid.trim();
+        var gr=(lotDiv.querySelector(".ro-lot-grade")||{}).value||"";gr=gr.trim();
+        var ln=parseFloat((lotDiv.querySelector(".ro-lot-length")||{}).value||0)||0;
+        var pc=parseInt((lotDiv.querySelector(".ro-lot-pcs")||{}).value||0)||0;
+        if(!lid||!gr||!ln||!pc){alert("Section #"+(si+1)+" Lot #"+(li+1)+": Please fill all fields.");valid=false;return;}
+        var existingLot=lots.find(function(l){return l.id===lid;});
         if(existingLot){
           existingLot.lengths.push({grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[],closed:false});
         } else {
-          existing.lots.push({id:lid,lengths:[{grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[],closed:false}]});
+          lots.push({id:lid,lengths:[{grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[],closed:false}]});
         }
-      } else {
-        orders.push({finishRollingSize:sz,lots:[{id:lid,lengths:[{grade:gr,length:ln,requiredPcs:pc,key:gr+"_"+ln,submittedPieces:[],closed:false}]}]});
-      }
-    }
+      });
+      if(valid)orders.push({finishRollingSize:sz,lots:lots});
+    });
+    if(!valid)return;
     for(var j=0;j<orders.length;j++){
       await saveRollingOrder(Object.assign(orders[j],{assignedToAll:assignedTo==="all",assignedWorkerId:assignedWorkerId,assignedWorkerName:assignedWorkerName}));
     }
     alert("\u2705 "+orders.length+" Rolling Order(s) saved!");draw();
-  };
-  // Add lot row
-  var btnRoAddLot=document.getElementById("btnRoAddLot");
-  if(btnRoAddLot) btnRoAddLot.onclick=function(){
-    var container=document.getElementById("roLotsContainer");
-    if(!container)return;
-    var idx=container.querySelectorAll(".ro-manual-lot").length;
-    var div=document.createElement("div");
-    div.className="ro-manual-lot";
-    div.dataset.lotIdx=idx;
-    div.innerHTML='<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:12px;margin-bottom:10px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-      '<p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0">&#128202; Rolling Lot #'+(idx+1)+'</p>'+
-      '<button class="ro-remove-lot" style="background:rgba(220,38,38,0.1);border:none;border-radius:6px;padding:4px 10px;color:#dc2626;font-size:12px;cursor:pointer">&#10005;</button>'+
-      '</div>'+
-      '<div style="margin-bottom:8px"><label class="lbl">Rolling Lot ID</label><input class="ro-lot-id" placeholder="e.g. 101040123177"/></div>'+
-      '<div class="grid3">'+
-        '<div><label class="lbl">Grade</label><input class="ro-lot-grade" placeholder="e.g. S355JR"/></div>'+
-        '<div><label class="lbl">Length (m)</label><input class="ro-lot-length" placeholder="e.g. 12.0" inputmode="decimal"/></div>'+
-        '<div><label class="lbl">Required Pcs</label><input class="ro-lot-pcs" placeholder="e.g. 6" inputmode="numeric"/></div>'+
-      '</div>'+
-      '</div>';
-    container.appendChild(div);
   };
   var btnRoFinal=document.getElementById("btnRoFinalSubmit");
   if(btnRoFinal) btnRoFinal.onclick=async function(){
