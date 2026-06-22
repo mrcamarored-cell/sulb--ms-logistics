@@ -103,7 +103,7 @@ async function releaseMyReservations(){for(var i=0;i<myReservations.length;i++){
 function listenRollingOrders(){if(unsubRO)unsubRO();unsubRO=db.collection("rollingOrders").orderBy("createdAt","desc").onSnapshot(function(snap){roOrders=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});draw();});}
 async function saveRollingOrder(orderData){try{var ref=await db.collection("rollingOrders").add(Object.assign({},orderData,{createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:S.supervisorName||S.uname,date:fmtDate(new Date()),status:"active"}));return ref.id;}catch(e){alert("Error saving order: "+e.message);return null;}}
 async function updateRollingOrderPieces(orderId,lotId,lengthKey,newPieces){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=newPieces;li.closed=(newPieces.length>=li.requiredPcs);await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
-async function toggleLengthClosed(orderId,lotId,lengthKey,forceOpen){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.closed=forceOpen?false:!li.closed;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
+async function toggleLengthClosed(orderId,lotId,lengthKey,forceOpen){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;if(forceOpen){li.closed=false;li.unlocked=true;}else{li.closed=true;li.unlocked=false;}await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
 async function removePieceFromRO(orderId,lotId,lengthKey,pieceIdx){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=(li.submittedPieces||[]).filter(function(_,i){return i!==pieceIdx;});if(li.submittedPieces.length<li.requiredPcs)li.closed=false;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
 
 function ss(u){Object.assign(S,u);draw();}
@@ -178,12 +178,11 @@ function roWorkerHTML(){
   });
 
   // إيجاد أول step غير مكتمل
-  var currentStepIdx=0;
+  var currentStepIdx=allSteps.length; // افتراضي: كل شيء مكتمل
   for(var i=0;i<allSteps.length;i++){
     var sp=allSteps[i];
     var done=(sp.len.submittedPieces||[]).length;
     if(done<sp.len.requiredPcs&&!sp.len.closed){currentStepIdx=i;break;}
-    if(i===allSteps.length-1)currentStepIdx=allSteps.length; // كل شيء مكتمل
   }
 
   // إذا كان العامل اختار lot وlength محددين
@@ -200,28 +199,33 @@ function roWorkerHTML(){
       var done=(sp.len.submittedPieces||[]).length;
       var req=sp.len.requiredPcs;
       var isComplete=done>=req||sp.len.closed;
-      var isCurrent=idx===currentStepIdx&&!allComplete;
-      var isLocked=idx>currentStepIdx&&!isComplete;
+      var isCurrent=(idx===currentStepIdx||sp.len.unlocked)&&!isComplete&&!allComplete;
+      var isLocked=idx>currentStepIdx&&!isComplete&&!sp.len.unlocked;
       var pct=req>0?Math.min(Math.round(done/req*100),100):0;
 
+      // القفل الصارم: فقط الـ step الحالي مفتوح
+      var isUnlocked=isComplete||isCurrent;
       var bg=isComplete?'rgba(16,185,129,0.06)':isCurrent?'rgba(59,130,246,0.06)':'rgba(30,58,138,0.02)';
-      var border=isComplete?'rgba(16,185,129,0.4)':isCurrent?'#3b82f6':'rgba(30,58,138,0.12)';
+      var border=isComplete?'rgba(16,185,129,0.4)':isCurrent?'#3b82f6':'rgba(30,58,138,0.1)';
 
-      return '<div style="background:'+bg+';border:2px solid '+border+';border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px">'+
+      return '<div style="background:'+bg+';border:2px solid '+border+';border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;opacity:'+(isLocked?'0.5':'1')+'">'+
         // رقم الترتيب
-        '<div style="width:32px;height:32px;border-radius:50%;background:'+(isComplete?'#10b981':isCurrent?'#3b82f6':'rgba(30,58,138,0.15)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
-        '<span style="font-size:13px;font-weight:800;color:'+(isComplete||isCurrent?'#fff':'#4a6080')+'">'+(isComplete?'&#10003;':isLocked?'&#128274;':(idx+1))+'</span></div>'+
+        '<div style="width:36px;height:36px;border-radius:50%;background:'+(isComplete?'#10b981':isCurrent?'#3b82f6':'rgba(30,58,138,0.15)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+        '<span style="font-size:14px;font-weight:800;color:'+(isComplete||isCurrent?'#fff':'#4a6080')+'">'+(isComplete?'&#10003;':isLocked?'&#128274;':(idx+1))+'</span></div>'+
         // المحتوى
         '<div style="flex:1">'+
         '<p style="margin:0;font-size:11px;color:#4a6080;font-weight:600">&#128202; '+sp.lotId+'</p>'+
         '<p style="margin:3px 0 0;font-size:15px;font-weight:800;color:#1e3a8a">'+sp.len.length+' m &nbsp;|&nbsp; '+sp.len.grade+'</p>'+
-        (!isLocked?'<div style="margin-top:6px;background:#e8edf2;border-radius:10px;height:5px"><div style="background:'+(isComplete?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+pct+'%"></div></div>':'<p style="margin:4px 0 0;font-size:11px;color:#9ab">Complete previous step first</p>')+
+        '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Required: '+req+' pcs</p>'+
+        (isUnlocked?'<div style="margin-top:6px;background:#e8edf2;border-radius:10px;height:5px"><div style="background:'+(isComplete?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+pct+'%"></div></div>':
+        '<p style="margin:4px 0 0;font-size:10px;color:#9ab;font-style:italic">&#128274; Complete step '+(idx)+' first</p>')+
         '</div>'+
         // العداد والزر
         '<div style="text-align:right;flex-shrink:0">'+
         '<span class="counter-badge '+(isComplete?'counter-done':done>0?'counter-ok':'counter-ok')+'">'+done+'/'+req+'</span>'+
-        (!isLocked&&!isComplete?'<div style="margin-top:6px"><button data-ro-lot="'+sp.lotId+'" data-ro-length="'+sp.len.key+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">'+
-        (isCurrent?'&#9654; Start':'&#128260; Continue')+'</button></div>':'')+(isComplete?'<div style="margin-top:6px;font-size:11px;color:#059669;font-weight:700">&#9989; Done</div>':'')+
+        (isCurrent?'<div style="margin-top:8px"><button data-ro-go-step="1" data-ro-go-lot="'+sp.lotId+'" data-ro-go-len="'+sp.len.key+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:8px 16px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">'+
+        (done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
+        (isComplete?'<div style="margin-top:6px;font-size:12px;color:#059669;font-weight:700">&#9989; Done</div>':'')+
         '</div></div>';
     }).join('');
 
@@ -406,10 +410,10 @@ function bind(){
   var btnRoBackLot=document.getElementById("btnRoBackLot");if(btnRoBackLot) btnRoBackLot.onclick=function(){roActiveLot=null;roActiveLength=null;draw();};
   var btnRoBackLength=document.getElementById("btnRoBackLength");if(btnRoBackLength) btnRoBackLength.onclick=function(){roActiveLot=null;roActiveLength=null;S.roPieceStatus={};S.roHeatNo='';S.roStrand='';S.roBatchNo='';draw();};
   // Step buttons في القائمة المتسلسلة
-  document.querySelectorAll("[data-ro-lot][data-ro-length]").forEach(function(b){
+  document.querySelectorAll("[data-ro-go-step]").forEach(function(b){
     b.onclick=function(){
-      roActiveLot=b.dataset.roLot;
-      roActiveLength=b.dataset.roLength;
+      roActiveLot=b.dataset.roGoLot;
+      roActiveLength=b.dataset.roGoLen;
       S.roPieceStatus={};S.roHeatNo='';S.roStrand='';S.roBatchNo='';S.roQty='';S.roLocFrom='';S.roRemarks='';
       draw();
     };
