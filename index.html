@@ -200,7 +200,8 @@ function roWorkerHTML(){
     var cards=myOrders.length===0?
       '<div style="text-align:center;padding:40px;color:#4a6080"><div style="font-size:48px">&#128196;</div><p style="margin-top:12px">No active rolling orders</p></div>':
       myOrders.map(function(o){
-        var secs=o.sections||[];
+        // fallback للبيانات القديمة التي تستخدم steps أو lots
+      var secs=o.sections||(o.steps?[{sectionSize:o.finishRollingSize||'--',lots:o.steps.map(function(st){return {lotId:st.lotId||st.id||'--',grade:st.grade,length:st.length,requiredPcs:st.requiredPcs,submittedPieces:st.submittedPieces||[],closed:st.closed||false,key:st.key||st.grade+'_'+st.length};}),closed:false}]:[])||[];
         var tp=secs.reduce(function(s,sec){return s+(sec.lots||[]).reduce(function(s2,l){return s2+l.requiredPcs;},0);},0);
         var dp=secs.reduce(function(s,sec){return s+(sec.lots||[]).reduce(function(s2,l){return s2+(l.submittedPieces||[]).length;},0);},0);
         var pct=tp>0?Math.round(dp/tp*100):0;
@@ -222,7 +223,8 @@ function roWorkerHTML(){
 
   var order=roOrders.find(function(o){return o.id===roActiveOrder;});
   if(!order){roActiveOrder=null;return roWorkerHTML();}
-  var sections=order.sections||[];
+  // fallback للبيانات القديمة
+  var sections=order.sections||(order.steps?[{sectionSize:order.finishRollingSize||'--',lots:order.steps.map(function(st){return {lotId:st.lotId||st.id||'--',grade:st.grade,length:st.length,requiredPcs:st.requiredPcs,submittedPieces:st.submittedPieces||[],closed:st.closed||false,key:st.key||st.grade+'_'+st.length};}),closed:false}]:[])||[];
 
   // --- شاشة إدخال القطعة ---
   if(roActiveStep!==null&&roActiveStep!==undefined){
