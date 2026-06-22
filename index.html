@@ -103,7 +103,7 @@ async function releaseMyReservations(){for(var i=0;i<myReservations.length;i++){
 function listenRollingOrders(){if(unsubRO)unsubRO();unsubRO=db.collection("rollingOrders").orderBy("createdAt","desc").onSnapshot(function(snap){roOrders=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});draw();});}
 async function saveRollingOrder(orderData){try{var ref=await db.collection("rollingOrders").add(Object.assign({},orderData,{createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:S.supervisorName||S.uname,date:fmtDate(new Date()),status:"active"}));return ref.id;}catch(e){alert("Error saving order: "+e.message);return null;}}
 async function updateRollingOrderPieces(orderId,lotId,lengthKey,newPieces){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=newPieces;li.closed=(newPieces.length>=li.requiredPcs);await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
-async function toggleLengthClosed(orderId,lotId,lengthKey,forceOpen){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;if(forceOpen){li.closed=false;li.unlocked=true;}else{li.closed=true;li.unlocked=false;}await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
+async function toggleLengthClosed(orderId,lotId,lengthKey,forceOpen){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.closed=forceOpen?false:true;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
 async function removePieceFromRO(orderId,lotId,lengthKey,pieceIdx){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=(li.submittedPieces||[]).filter(function(_,i){return i!==pieceIdx;});if(li.submittedPieces.length<li.requiredPcs)li.closed=false;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
 
 function ss(u){Object.assign(S,u);draw();}
@@ -177,12 +177,13 @@ function roWorkerHTML(){
     });
   });
 
-  // إيجاد أول step غير مكتمل
+  // إيجاد أول step غير مكتمل (الترتيب ثابت دائماً)
   var currentStepIdx=allSteps.length; // افتراضي: كل شيء مكتمل
   for(var i=0;i<allSteps.length;i++){
     var sp=allSteps[i];
     var done=(sp.len.submittedPieces||[]).length;
-    if(done<sp.len.requiredPcs&&!sp.len.closed){currentStepIdx=i;break;}
+    var isStepComplete=done>=sp.len.requiredPcs||sp.len.closed;
+    if(!isStepComplete){currentStepIdx=i;break;}
   }
 
   // إذا كان العامل اختار lot وlength محددين
@@ -199,32 +200,38 @@ function roWorkerHTML(){
       var done=(sp.len.submittedPieces||[]).length;
       var req=sp.len.requiredPcs;
       var isComplete=done>=req||sp.len.closed;
-      var isCurrent=(idx===currentStepIdx||sp.len.unlocked)&&!isComplete&&!allComplete;
-      var isLocked=idx>currentStepIdx&&!isComplete&&!sp.len.unlocked;
+
+
       var pct=req>0?Math.min(Math.round(done/req*100),100):0;
 
-      // القفل الصارم: فقط الـ step الحالي مفتوح
-      var isUnlocked=isComplete||isCurrent;
-      var bg=isComplete?'rgba(16,185,129,0.06)':isCurrent?'rgba(59,130,246,0.06)':'rgba(30,58,138,0.02)';
-      var border=isComplete?'rgba(16,185,129,0.4)':isCurrent?'#3b82f6':'rgba(30,58,138,0.1)';
+      // القاعدة: فقط currentStepIdx مفتوح، الباقي مقفل بالكامل
+      var isComplete=(sp.len.submittedPieces||[]).length>=sp.len.requiredPcs;
+      var isClosedBySup=sp.len.closed&&!isComplete;
+      var isCurrent=idx===currentStepIdx;
+      var isLocked=idx>currentStepIdx;
+      var bg=isComplete?'rgba(16,185,129,0.06)':isCurrent&&!isClosedBySup?'rgba(59,130,246,0.06)':'rgba(30,58,138,0.02)';
+      var border=isComplete?'rgba(16,185,129,0.4)':isCurrent&&!isClosedBySup?'#3b82f6':'rgba(30,58,138,0.1)';
+      var icon=isComplete?'&#10003;':isLocked?'&#128274;':isClosedBySup?'&#9208;':(idx+1);
+      var iconBg=isComplete?'#10b981':isCurrent&&!isClosedBySup?'#3b82f6':'rgba(30,58,138,0.15)';
+      var iconColor=isComplete||isCurrent&&!isClosedBySup?'#fff':'#4a6080';
 
-      return '<div style="background:'+bg+';border:2px solid '+border+';border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;opacity:'+(isLocked?'0.5':'1')+'">'+
-        // رقم الترتيب
-        '<div style="width:36px;height:36px;border-radius:50%;background:'+(isComplete?'#10b981':isCurrent?'#3b82f6':'rgba(30,58,138,0.15)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
-        '<span style="font-size:14px;font-weight:800;color:'+(isComplete||isCurrent?'#fff':'#4a6080')+'">'+(isComplete?'&#10003;':isLocked?'&#128274;':(idx+1))+'</span></div>'+
-        // المحتوى
+      return '<div style="background:'+bg+';border:2px solid '+border+';border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;opacity:'+(isLocked?'0.4':'1')+'">'+
+        '<div style="width:36px;height:36px;border-radius:50%;background:'+iconBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+        '<span style="font-size:13px;font-weight:800;color:'+iconColor+'">'+icon+'</span></div>'+
         '<div style="flex:1">'+
         '<p style="margin:0;font-size:11px;color:#4a6080;font-weight:600">&#128202; '+sp.lotId+'</p>'+
         '<p style="margin:3px 0 0;font-size:15px;font-weight:800;color:#1e3a8a">'+sp.len.length+' m &nbsp;|&nbsp; '+sp.len.grade+'</p>'+
         '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Required: '+req+' pcs</p>'+
-        (isUnlocked?'<div style="margin-top:6px;background:#e8edf2;border-radius:10px;height:5px"><div style="background:'+(isComplete?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+pct+'%"></div></div>':
-        '<p style="margin:4px 0 0;font-size:10px;color:#9ab;font-style:italic">&#128274; Complete step '+(idx)+' first</p>')+
+        (isComplete||isCurrent&&!isClosedBySup?
+          '<div style="margin-top:6px;background:#e8edf2;border-radius:10px;height:5px"><div style="background:'+(isComplete?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+pct+'%"></div></div>':
+          isClosedBySup?'<p style="margin:4px 0 0;font-size:11px;color:#d97706;font-weight:600">&#9208; Paused by supervisor</p>':
+          '<p style="margin:4px 0 0;font-size:10px;color:#9ab;font-style:italic">&#128274; Complete step '+(idx)+' first</p>')+
         '</div>'+
-        // العداد والزر
         '<div style="text-align:right;flex-shrink:0">'+
-        '<span class="counter-badge '+(isComplete?'counter-done':done>0?'counter-ok':'counter-ok')+'">'+done+'/'+req+'</span>'+
-        (isCurrent?'<div style="margin-top:8px"><button data-ro-go-step="1" data-ro-go-lot="'+sp.lotId+'" data-ro-go-len="'+sp.len.key+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:8px 16px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">'+
-        (done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
+        '<span class="counter-badge '+(isComplete?'counter-done':'counter-ok')+'">'+done+'/'+req+'</span>'+
+        (isCurrent&&!isClosedBySup?
+          '<div style="margin-top:8px"><button data-ro-go-step="1" data-ro-go-lot="'+sp.lotId+'" data-ro-go-len="'+sp.len.key+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:8px 16px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">'+
+          (done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
         (isComplete?'<div style="margin-top:6px;font-size:12px;color:#059669;font-weight:700">&#9989; Done</div>':'')+
         '</div></div>';
     }).join('');
