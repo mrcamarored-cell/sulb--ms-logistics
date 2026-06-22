@@ -161,157 +161,155 @@ function roWorkerHTML(){
     return topbarW()+'<div class="wrap">'+
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
       '<button id="btnRoBack" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Back</button>'+
-      '<div><p style="font-size:16px;font-weight:800;color:#1e3a8a;margin:0">&#128293; Rolling Orders</p></div></div>'+
+      '<p style="font-size:16px;font-weight:800;color:#1e3a8a;margin:0">&#128293; Rolling Orders</p></div>'+
       cards+'</div>';
   }
 
   var order=roOrders.find(function(o){return o.id===roActiveOrder;});
   if(!order){roActiveOrder=null;return roWorkerHTML();}
 
-  // بناء قائمة مرتبة من كل الـ lengths عبر كل الـ lots
-  // الترتيب: lot1-len1, lot1-len2, lot2-len1, ...
+  // بناء قائمة Steps المرتبة: section1-lot1, section1-lot2, section2-lot1...
+  // كل lot يمثل step واحد (مع جميع lengths الخاصة به)
   var allSteps=[];
   (order.lots||[]).forEach(function(lot){
+    // كل length في الـ lot تصبح sub-step
     (lot.lengths||[]).forEach(function(len){
-      allSteps.push({lotId:lot.id,len:len});
+      allSteps.push({
+        lotId:lot.id,
+        len:len,
+        sectionSize:order.finishRollingSize
+      });
     });
   });
 
-  // إيجاد أول step غير مكتمل (الترتيب ثابت دائماً)
-  var currentStepIdx=allSteps.length; // افتراضي: كل شيء مكتمل
+  // حساب أول step غير مكتمل وغير مغلق
+  var currentStepIdx=allSteps.length; // كل شيء مكتمل
   for(var i=0;i<allSteps.length;i++){
     var sp=allSteps[i];
     var done=(sp.len.submittedPieces||[]).length;
-    var isStepComplete=done>=sp.len.requiredPcs||sp.len.closed;
-    if(!isStepComplete){currentStepIdx=i;break;}
+    var stepComplete=done>=sp.len.requiredPcs;
+    if(!stepComplete){currentStepIdx=i;break;}
   }
+  var allComplete=currentStepIdx===allSteps.length;
 
-  // إذا كان العامل اختار lot وlength محددين
-  var activeLotId=roActiveLot;
-  var activeLenKey=roActiveLength;
+  // شاشة إدخال القطعة
+  if(roActiveLot&&roActiveLength){
+    var lot=order.lots.find(function(l){return l.id===roActiveLot;});
+    if(!lot){roActiveLot=null;roActiveLength=null;return roWorkerHTML();}
+    var li=lot.lengths.find(function(l){return l.key===roActiveLength;});
+    if(!li){roActiveLength=null;return roWorkerHTML();}
 
-  // شاشة القائمة الكاملة مع القفل
-  if(!activeLotId){
-    var totalDone=allSteps.reduce(function(s,sp){return s+(sp.len.submittedPieces||[]).length;},0);
-    var totalReq=allSteps.reduce(function(s,sp){return s+sp.len.requiredPcs;},0);
-    var allComplete=totalDone>=totalReq;
+    var d3=(li.submittedPieces||[]).length;var r3=li.requiredPcs;var done3=d3>=r3;
+    var roStatus=S.roPieceStatus||{};
+    var statusMsg='';
+    if(roStatus.notFound)statusMsg='<div class="warn-yellow">&#10007; Batch <strong>'+roStatus.batch+'</strong> not found in stock.</div>';
+    else if(roStatus.mismatch)statusMsg='<div class="warn">&#9888; Mismatch! Stock: Grade <strong>'+roStatus.stockGrade+'</strong> Length <strong>'+roStatus.stockLength+'</strong> — Required: Grade <strong>'+li.grade+'</strong> Length <strong>'+li.length+'</strong></div>';
+    else if(roStatus.ok)statusMsg='<div class="info-green">&#10003; Verified! Grade: <strong>'+roStatus.stockGrade+'</strong> Length: <strong>'+roStatus.stockLength+'</strong></div>';
 
-    var stepsHtml=allSteps.map(function(sp,idx){
-      var done=(sp.len.submittedPieces||[]).length;
-      var req=sp.len.requiredPcs;
-      var isComplete=done>=req||sp.len.closed;
+    var stepNum=allSteps.findIndex(function(sp){return sp.lotId===roActiveLot&&sp.len.key===roActiveLength;})+1;
 
-
-      var pct=req>0?Math.min(Math.round(done/req*100),100):0;
-
-      // القاعدة: فقط currentStepIdx مفتوح، الباقي مقفل بالكامل
-      var isComplete=(sp.len.submittedPieces||[]).length>=sp.len.requiredPcs;
-      var isClosedBySup=sp.len.closed&&!isComplete;
-      var isCurrent=idx===currentStepIdx;
-      var isLocked=idx>currentStepIdx;
-      var bg=isComplete?'rgba(16,185,129,0.06)':isCurrent&&!isClosedBySup?'rgba(59,130,246,0.06)':'rgba(30,58,138,0.02)';
-      var border=isComplete?'rgba(16,185,129,0.4)':isCurrent&&!isClosedBySup?'#3b82f6':'rgba(30,58,138,0.1)';
-      var icon=isComplete?'&#10003;':isLocked?'&#128274;':isClosedBySup?'&#9208;':(idx+1);
-      var iconBg=isComplete?'#10b981':isCurrent&&!isClosedBySup?'#3b82f6':'rgba(30,58,138,0.15)';
-      var iconColor=isComplete||isCurrent&&!isClosedBySup?'#fff':'#4a6080';
-
-      return '<div style="background:'+bg+';border:2px solid '+border+';border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;opacity:'+(isLocked?'0.4':'1')+'">'+
-        '<div style="width:36px;height:36px;border-radius:50%;background:'+iconBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
-        '<span style="font-size:13px;font-weight:800;color:'+iconColor+'">'+icon+'</span></div>'+
-        '<div style="flex:1">'+
-        '<p style="margin:0;font-size:11px;color:#4a6080;font-weight:600">&#128202; '+sp.lotId+'</p>'+
-        '<p style="margin:3px 0 0;font-size:15px;font-weight:800;color:#1e3a8a">'+sp.len.length+' m &nbsp;|&nbsp; '+sp.len.grade+'</p>'+
-        '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Required: '+req+' pcs</p>'+
-        (isComplete||isCurrent&&!isClosedBySup?
-          '<div style="margin-top:6px;background:#e8edf2;border-radius:10px;height:5px"><div style="background:'+(isComplete?'#10b981':'#3b82f6')+';border-radius:10px;height:5px;width:'+pct+'%"></div></div>':
-          isClosedBySup?'<p style="margin:4px 0 0;font-size:11px;color:#d97706;font-weight:600">&#9208; Paused by supervisor</p>':
-          '<p style="margin:4px 0 0;font-size:10px;color:#9ab;font-style:italic">&#128274; Complete step '+(idx)+' first</p>')+
-        '</div>'+
-        '<div style="text-align:right;flex-shrink:0">'+
-        '<span class="counter-badge '+(isComplete?'counter-done':'counter-ok')+'">'+done+'/'+req+'</span>'+
-        (isCurrent&&!isClosedBySup?
-          '<div style="margin-top:8px"><button data-ro-go-step="1" data-ro-go-lot="'+sp.lotId+'" data-ro-go-len="'+sp.len.key+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:8px 16px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">'+
-          (done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
-        (isComplete?'<div style="margin-top:6px;font-size:12px;color:#059669;font-weight:700">&#9989; Done</div>':'')+
-        '</div></div>';
+    var sList=(li.submittedPieces||[]).map(function(p){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f8fafc;border:1px solid rgba(30,58,138,0.1);border-radius:8px;margin-bottom:6px">'+
+        '<div><p style="margin:0;font-size:12px;font-weight:700;color:#1e3a8a">'+(p.batchNo||"--")+'</p>'+
+        '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(p.heatNo||"")+' | Strand: '+(p.strand||"")+' | Qty: '+(p.quantity||"")+'</p></div>'+
+        '<p style="margin:0;font-size:11px;color:#4a6080">'+p.time+'</p></div>';
     }).join('');
 
     return topbarW()+'<div class="wrap">'+
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
-      '<button id="btnRoBackOrder" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Orders</button>'+
-      '<div><p style="font-size:15px;font-weight:800;color:#1e3a8a;margin:0">'+order.finishRollingSize+'</p>'+
-      '<p style="font-size:11px;color:#4a6080;margin:0">'+totalDone+'/'+totalReq+' pieces done</p></div></div>'+
-      // Progress bar كاملة
-      '<div style="background:#fff;border:1px solid rgba(30,58,138,0.12);border-radius:12px;padding:14px;margin-bottom:16px">'+
-      '<div style="display:flex;justify-content:space-between;margin-bottom:6px">'+
-      '<span style="font-size:12px;font-weight:700;color:#1e3a8a">Overall Progress</span>'+
-      '<span style="font-size:12px;font-weight:700;color:#1e3a8a">'+Math.round(totalReq>0?totalDone/totalReq*100:0)+'%</span></div>'+
-      '<div style="background:#e8edf2;border-radius:10px;height:8px">'+
-      '<div style="background:linear-gradient(90deg,#1e3a8a,#3b82f6);border-radius:10px;height:8px;width:'+Math.min(totalReq>0?Math.round(totalDone/totalReq*100):0,100)+'%;transition:width 0.3s"></div></div>'+
-      '</div>'+
-      stepsHtml+'</div>';
+      '<button id="btnRoBackLength" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; List</button>'+
+      '<div><p style="font-size:14px;font-weight:800;color:#1e3a8a;margin:0">Step '+stepNum+' of '+allSteps.length+'</p>'+
+      '<p style="font-size:11px;color:#4a6080;margin:0">Lot: '+roActiveLot+' | '+li.length+'m — '+li.grade+'</p></div></div>'+
+      '<div style="background:'+(done3?'rgba(16,185,129,0.08)':'rgba(30,58,138,0.04)')+';border:2px solid '+(done3?'rgba(16,185,129,0.4)':'rgba(30,58,138,0.15)')+';border-radius:14px;padding:16px;margin-bottom:16px;text-align:center">'+
+      '<p style="font-size:36px;font-weight:900;color:'+(done3?'#059669':'#1e3a8a')+';margin:0">'+d3+' / '+r3+'</p>'+
+      '<p style="font-size:13px;color:#4a6080;margin:4px 0 0">'+(done3?'&#9989; Complete!':Math.max(0,r3-d3)+' remaining')+'</p></div>'+
+      (sList?'<div class="card"><div class="card-title">Submitted Pieces</div>'+sList+'</div>':'')+
+      (done3?
+        '<div class="info-green" style="text-align:center;padding:16px;margin-bottom:12px">&#9989; All pieces submitted!</div>'+
+        '<button class="bp" id="btnRoFinalSubmit">Submit to Supervisor &#10003;</button>':
+        '<div class="card"><div class="card-title">Enter Piece Details</div>'+
+        '<div class="sub"><div class="sub-title">Material Details</div>'+
+        '<div class="grid3" style="margin-bottom:8px">'+
+        '<div><label class="lbl">Heat No.</label><input id="ro_heatNo" placeholder="e.g. 1264133" inputmode="numeric" value="'+(S.roHeatNo||'')+'"/></div>'+
+        '<div><label class="lbl">Strand</label><input id="ro_strand" placeholder="e.g. C01" value="'+(S.roStrand||'')+'"/></div>'+
+        '<div><label class="lbl">Batch No.</label><input id="ro_batchNo" readonly style="font-weight:700" value="'+(S.roBatchNo||'')+'"/></div>'+
+        '</div>'+statusMsg+
+        '<div class="grid3" style="margin-top:8px">'+
+        '<div><label class="lbl">Grade</label><input id="ro_grade" value="'+(roStatus.ok?roStatus.stockGrade:li.grade)+'" readonly'+(roStatus.mismatch?' style="border-color:#dc2626"':'')+'/></div>'+
+        '<div><label class="lbl">Length (m)</label><input id="ro_length" value="'+(roStatus.ok?roStatus.stockLength:li.length)+'" readonly'+(roStatus.mismatch?' style="border-color:#dc2626"':'')+'/></div>'+
+        '<div><label class="lbl">Quantity (MT)</label><input id="ro_qty" placeholder="e.g. 1" value="'+(S.roQty||roStatus.stockQty||'')+'"/></div>'+
+        '</div></div>'+
+        '<div class="sub"><div class="sub-title">Location</div>'+
+        '<div class="grid2">'+
+        '<div><label class="lbl">From</label><input id="ro_locFrom" placeholder="e.g. H030" value="'+(S.roLocFrom||roStatus.stockLoc||'')+'"/></div>'+
+        '<div><label class="lbl">To</label><input id="ro_locTo" value="Rolling Mill" readonly/></div>'+
+        '</div></div>'+
+        '<div><label class="lbl">Remarks <span style="color:#dc2626">*</span></label>'+
+        '<select id="ro_remarks" style="background:#fff"><option value="">-- Select Remark --</option>'+
+        remarksOptions.map(function(o2){return '<option value="'+o2+'"'+(S.roRemarks===o2?' selected':'')+'>'+o2+'</option>';}).join('')+
+        '</select></div>'+
+        '<button class="bp" id="btnRoSubmitPiece" style="margin-top:12px"'+(roStatus.mismatch?' disabled':'')+'>Submit Piece &#10003;</button>'+
+        '</div>'
+      )+'</div>';
   }
 
-  // شاشة إدخال القطعة
-  var lot=order.lots.find(function(l){return l.id===activeLotId;});
-  if(!lot){roActiveLot=null;return roWorkerHTML();}
-  var li=lot.lengths.find(function(l){return l.key===activeLenKey;});
-  if(!li){roActiveLength=null;return roWorkerHTML();}
+  // شاشة القائمة المتسلسلة
+  var totalDone=allSteps.reduce(function(s,sp){return s+(sp.len.submittedPieces||[]).length;},0);
+  var totalReq=allSteps.reduce(function(s,sp){return s+sp.len.requiredPcs;},0);
+  var pctTotal=totalReq>0?Math.min(Math.round(totalDone/totalReq*100),100):0;
 
-  var d3=(li.submittedPieces||[]).length;var r3=li.requiredPcs;var done3=d3>=r3;
-  var roStatus=S.roPieceStatus||{};
-  var statusMsg='';
-  if(roStatus.notFound)statusMsg='<div class="warn-yellow">&#10007; Batch <strong>'+roStatus.batch+'</strong> not found in stock.</div>';
-  else if(roStatus.mismatch)statusMsg='<div class="warn">&#9888; Mismatch! Stock: Grade <strong>'+roStatus.stockGrade+'</strong> Length <strong>'+roStatus.stockLength+'</strong> — Required: Grade <strong>'+li.grade+'</strong> Length <strong>'+li.length+'</strong></div>';
-  else if(roStatus.ok)statusMsg='<div class="info-green">&#10003; Verified! Grade: <strong>'+roStatus.stockGrade+'</strong> Length: <strong>'+roStatus.stockLength+'</strong></div>';
+  var stepsHtml=allSteps.map(function(sp,idx){
+    var done=(sp.len.submittedPieces||[]).length;
+    var req=sp.len.requiredPcs;
+    var isComplete=done>=req;
+    var isClosedBySup=sp.len.closed&&!isComplete;
+    var isCurrent=idx===currentStepIdx&&!isClosedBySup;
+    var isLocked=idx>currentStepIdx||(idx===currentStepIdx&&isClosedBySup);
+    var pct=req>0?Math.min(Math.round(done/req*100),100):0;
 
-  var sList=(li.submittedPieces||[]).map(function(p,pi){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f8fafc;border:1px solid rgba(30,58,138,0.1);border-radius:8px;margin-bottom:6px">'+
-      '<div><p style="margin:0;font-size:12px;font-weight:700;color:#1e3a8a">'+(p.batchNo||"--")+'</p>'+
-      '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(p.heatNo||"")+' | Strand: '+(p.strand||"")+' | Qty: '+(p.quantity||"")+'</p></div>'+
-      '<p style="margin:0;font-size:11px;color:#4a6080">'+p.time+'</p></div>';
+    // تحديد لون ونمط الـ step
+    var bg=isComplete?'rgba(16,185,129,0.06)':isCurrent?'rgba(59,130,246,0.06)':isClosedBySup?'rgba(245,158,11,0.04)':'#fff';
+    var border=isComplete?'rgba(16,185,129,0.4)':isCurrent?'#3b82f6':isClosedBySup?'rgba(245,158,11,0.4)':'rgba(30,58,138,0.1)';
+    var numBg=isComplete?'#10b981':isCurrent?'#3b82f6':isClosedBySup?'#d97706':'rgba(30,58,138,0.12)';
+    var numColor=isComplete||isCurrent?'#fff':isClosedBySup?'#fff':'#4a6080';
+    var numIcon=isComplete?'&#10003;':isClosedBySup?'&#9208;':isLocked?'&#128274;':(idx+1);
+
+    return '<div style="background:'+bg+';border:2px solid '+border+';border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;opacity:'+(isLocked&&!isClosedBySup?'0.4':'1')+'">'+
+      '<div style="width:36px;height:36px;border-radius:50%;background:'+numBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+      '<span style="font-size:13px;font-weight:800;color:'+numColor+'">'+numIcon+'</span></div>'+
+      '<div style="flex:1;min-width:0">'+
+      '<p style="margin:0;font-size:11px;color:#4a6080;font-weight:600">&#128196; '+sp.sectionSize+' &nbsp;|&nbsp; &#128202; '+sp.lotId+'</p>'+
+      '<p style="margin:3px 0 0;font-size:15px;font-weight:800;color:#1e3a8a">'+sp.len.length+' m &nbsp;|&nbsp; '+sp.len.grade+'</p>'+
+      (isComplete?
+        '<p style="margin:4px 0 0;font-size:11px;color:#059669;font-weight:600">&#9989; Completed</p>':
+        isCurrent?
+          '<div style="margin-top:6px;background:#e8edf2;border-radius:10px;height:5px"><div style="background:#3b82f6;border-radius:10px;height:5px;width:'+pct+'%"></div></div>':
+          isClosedBySup?
+            '<p style="margin:4px 0 0;font-size:11px;color:#d97706;font-weight:600">&#9208; Paused by supervisor</p>':
+            '<p style="margin:4px 0 0;font-size:10px;color:#9ab;font-style:italic">&#128274; Locked</p>')+
+      '</div>'+
+      '<div style="text-align:right;flex-shrink:0">'+
+      '<span class="counter-badge '+(isComplete?'counter-done':'counter-ok')+'">'+done+'/'+req+'</span>'+
+      (isCurrent?
+        '<div style="margin-top:8px">'+
+        '<button data-ro-go-step="1" data-ro-go-lot="'+sp.lotId+'" data-ro-go-len="'+sp.len.key+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:8px 16px;color:#fff;font-weight:700;font-size:13px;cursor:pointer">'+
+        (done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
+      '</div></div>';
   }).join('');
-
-  // إيجاد رقم الـ step الحالي
-  var stepNum=allSteps.findIndex(function(sp){return sp.lotId===activeLotId&&sp.len.key===activeLenKey;})+1;
 
   return topbarW()+'<div class="wrap">'+
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
-    '<button id="btnRoBackLength" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; List</button>'+
-    '<div><p style="font-size:14px;font-weight:800;color:#1e3a8a;margin:0">Step '+stepNum+' of '+allSteps.length+'</p>'+
-    '<p style="font-size:11px;color:#4a6080;margin:0">Lot: '+activeLotId+' | '+li.length+'m — '+li.grade+'</p></div></div>'+
-    // عداد
-    '<div style="background:'+(done3?'rgba(16,185,129,0.08)':'rgba(30,58,138,0.04)')+';border:2px solid '+(done3?'rgba(16,185,129,0.4)':'rgba(30,58,138,0.15)')+';border-radius:14px;padding:16px;margin-bottom:16px;text-align:center">'+
-    '<p style="font-size:36px;font-weight:900;color:'+(done3?'#059669':'#1e3a8a')+';margin:0">'+d3+' / '+r3+'</p>'+
-    '<p style="font-size:13px;color:#4a6080;margin:4px 0 0">'+(done3?'&#9989; Complete!':Math.max(0,r3-d3)+' remaining')+'</p></div>'+
-    (sList?'<div class="card"><div class="card-title">Submitted Pieces</div>'+sList+'</div>':'')+
-    (done3?
-      '<div class="info-green" style="text-align:center;padding:16px;margin-bottom:12px">&#9989; All pieces submitted!</div>'+
-      '<button class="bp" id="btnRoFinalSubmit">Submit to Supervisor &#10003;</button>':
-      '<div class="card"><div class="card-title">Enter Piece Details</div>'+
-      '<div class="sub"><div class="sub-title">Material Details</div>'+
-      '<div class="grid3" style="margin-bottom:8px">'+
-      '<div><label class="lbl">Heat No.</label><input id="ro_heatNo" placeholder="e.g. 1264133" inputmode="numeric" value="'+(S.roHeatNo||'')+'"/></div>'+
-      '<div><label class="lbl">Strand</label><input id="ro_strand" placeholder="e.g. C01" value="'+(S.roStrand||'')+'"/></div>'+
-      '<div><label class="lbl">Batch No.</label><input id="ro_batchNo" readonly style="font-weight:700" value="'+(S.roBatchNo||'')+'"/></div>'+
-      '</div>'+statusMsg+
-      '<div class="grid3" style="margin-top:8px">'+
-      '<div><label class="lbl">Grade</label><input id="ro_grade" value="'+(roStatus.ok?roStatus.stockGrade:li.grade)+'" readonly'+(roStatus.mismatch?' style="border-color:#dc2626"':'')+'/></div>'+
-      '<div><label class="lbl">Length (m)</label><input id="ro_length" value="'+(roStatus.ok?roStatus.stockLength:li.length)+'" readonly'+(roStatus.mismatch?' style="border-color:#dc2626"':'')+'/></div>'+
-      '<div><label class="lbl">Quantity (MT)</label><input id="ro_qty" placeholder="e.g. 1" value="'+(S.roQty||roStatus.stockQty||'')+'"/></div>'+
-      '</div></div>'+
-      '<div class="sub"><div class="sub-title">Location</div>'+
-      '<div class="grid2">'+
-      '<div><label class="lbl">From</label><input id="ro_locFrom" placeholder="e.g. H030" value="'+(S.roLocFrom||roStatus.stockLoc||'')+'"/></div>'+
-      '<div><label class="lbl">To</label><input id="ro_locTo" value="Rolling Mill" readonly/></div>'+
-      '</div></div>'+
-      '<div><label class="lbl">Remarks <span style="color:#dc2626">*</span></label>'+
-      '<select id="ro_remarks" style="background:#fff"><option value="">-- Select Remark --</option>'+
-      remarksOptions.map(function(o2){return '<option value="'+o2+'"'+(S.roRemarks===o2?' selected':'')+'>'+o2+'</option>';}).join('')+
-      '</select></div>'+
-      '<button class="bp" id="btnRoSubmitPiece" style="margin-top:12px"'+(roStatus.mismatch?' disabled':'')+'>Submit Piece &#10003;</button>'+
-      '</div>'
-    )+'</div>';
+    '<button id="btnRoBackOrder" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Orders</button>'+
+    '<div><p style="font-size:15px;font-weight:800;color:#1e3a8a;margin:0">'+order.finishRollingSize+'</p>'+
+    '<p style="font-size:11px;color:#4a6080;margin:0">'+totalDone+'/'+totalReq+' pcs done</p></div></div>'+
+    '<div style="background:#fff;border:1px solid rgba(30,58,138,0.12);border-radius:12px;padding:14px;margin-bottom:16px">'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:6px">'+
+    '<span style="font-size:12px;font-weight:700;color:#1e3a8a">Overall Progress</span>'+
+    '<span style="font-size:12px;font-weight:700;color:#1e3a8a">'+pctTotal+'%</span></div>'+
+    '<div style="background:#e8edf2;border-radius:10px;height:8px">'+
+    '<div style="background:linear-gradient(90deg,#1e3a8a,#3b82f6);border-radius:10px;height:8px;width:'+pctTotal+'%"></div></div></div>'+
+    (allComplete?'<div class="info-green" style="text-align:center;padding:20px;margin-bottom:12px"><div style="font-size:36px">&#9989;</div><p style="margin:8px 0 0;font-weight:700">All steps completed!</p></div>':'')+
+    stepsHtml+'</div>';
 }
 function supTabs(){return '<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap"><button id="tabReq" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="requests"?"linear-gradient(135deg,#1e3a8a,#3b82f6)":"#fff")+';color:'+(S.supTab==="requests"?"#fff":"#1e3a8a")+'">&#128203; Requests</button><button id="tabRO" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="rolling"?"linear-gradient(135deg,#d97706,#f59e0b)":"#fff")+';color:'+(S.supTab==="rolling"?"#fff":"#d97706")+'">&#128293; Rolling</button><button id="tabStock" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="stock"?"linear-gradient(135deg,#059669,#10b981)":"#fff")+';color:'+(S.supTab==="stock"?"#fff":"#059669")+'">&#128196; Stock</button><button id="tabSearch" style="flex:1;min-width:70px;padding:10px;border-radius:10px;font-weight:700;font-size:12px;border:none;cursor:pointer;background:'+(S.supTab==="search"?"linear-gradient(135deg,#7c3aed,#a78bfa)":"#fff")+';color:'+(S.supTab==="search"?"#fff":"#7c3aed")+'">&#128269; Search</button></div>';}
 function supHTML(){
