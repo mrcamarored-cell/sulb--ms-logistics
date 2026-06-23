@@ -686,12 +686,15 @@ function bind(){
   var btnRoFinal=document.getElementById("btnRoFinalSubmit");
   if(btnRoFinal) btnRoFinal.onclick=async function(){
     var order=roOrders.find(function(o){return o.id===roActiveOrder;});
-    var lot=order?order.lots.find(function(l){return l.id===roActiveLot;}):null;
-    var li=lot?lot.lengths.find(function(l){return l.key===roActiveLength;}):null;
-    if(!li||!li.submittedPieces||!li.submittedPieces.length){alert("No pieces to submit.");return;}
-    if(!confirm("Submit "+li.submittedPieces.length+" piece(s) to supervisor?"))return;
+    if(!order||roActiveStep===null){alert("Error: order not found.");return;}
+    var parts2=String(roActiveStep).split('_');
+    var secIdx2=parseInt(parts2[0]);var lotIdx2=parseInt(parts2[1]);
+    var sec2=order.sections?order.sections[secIdx2]:null;
+    var lot2=sec2?(sec2.lots||[])[lotIdx2]:null;
+    if(!lot2||!lot2.submittedPieces||!lot2.submittedPieces.length){alert("No pieces to submit.");return;}
+    if(!confirm("Submit "+lot2.submittedPieces.length+" piece(s) to supervisor?"))return;
     var endT=new Date();var endStr=fmtTime(endT);
-    var rs=li.submittedPieces.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks,rollingLot:roActiveLot,rollingSize:order.finishRollingSize};});
+    var rs=lot2.submittedPieces.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks,rollingLot:lot2.lotId,rollingSize:sec2.sectionSize};});
     try{
       await db.collection("deliveryNotes").add({
         header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:li.submittedPieces[0].time||endStr,endTime:endStr},
