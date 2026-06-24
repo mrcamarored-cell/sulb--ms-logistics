@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.1.7";
+const VERSION="v1.1.8";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -708,6 +708,8 @@ function bind(){
   };
   var btnRoFinal=document.getElementById("btnRoFinalSubmit");
   if(btnRoFinal) btnRoFinal.onclick=async function(){
+    if(btnRoFinal.disabled)return;
+    btnRoFinal.disabled=true;btnRoFinal.textContent="Submitting...";
     var order=roOrders.find(function(o){return o.id===roActiveOrder;});
     if(!order||roActiveStep===null){alert("Error: order not found.");return;}
     var parts2=String(roActiveStep).split('_');
@@ -717,7 +719,7 @@ function bind(){
     if(!lot2||!lot2.submittedPieces||!lot2.submittedPieces.length){alert("No pieces to submit.");return;}
     if(!confirm("Submit "+lot2.submittedPieces.length+" piece(s) to supervisor?"))return;
     var endT=new Date();var endStr=fmtTime(endT);
-    var rs=lot2.submittedPieces.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks,rollingLot:lot2.lotId,rollingSize:sec2.sectionSize};});
+    var rs=lot2.submittedPieces.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),materialType:p.materialType||"",rollingSize:p.rollingSize||sec2.sectionSize||"",quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks||"",rollingLot:lot2.lotId};});
     try{
       await db.collection("deliveryNotes").add({
         header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:lot2.submittedPieces[0].time||endStr,endTime:endStr},
