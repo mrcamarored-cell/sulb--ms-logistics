@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.1.0";
+const VERSION="v1.1.6";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -278,6 +278,10 @@ function roWorkerHTML(){
         '<div><label class="lbl">Grade</label><input id="ro_grade" value="'+(roStatus.ok?roStatus.stockGrade:lot.grade)+'" readonly'+(roStatus.mismatch?' style="border-color:#dc2626"':'')+'/></div>'+
         '<div><label class="lbl">Length (m)</label><input id="ro_length" value="'+(roStatus.ok?roStatus.stockLength:lot.length)+'" readonly'+(roStatus.mismatch?' style="border-color:#dc2626"':'')+'/></div>'+
         '<div><label class="lbl">Quantity (MT)</label><input id="ro_qty" placeholder="e.g. 1" value="'+(S.roQty||roStatus.stockQty||'')+'"/></div>'+
+        '</div>'+
+        '<div class="grid2" style="margin-top:8px">'+
+        '<div><label class="lbl">Material Type</label><input id="ro_matType" value="'+(roStatus.stockMatType||'')+'" readonly'+(roStatus.ok?'':' placeholder="Auto-filled from stock"')+'/></div>'+
+        '<div><label class="lbl">Rolling Size</label><input id="ro_rollingSize" value="'+(sec.sectionSize||'')+'" readonly/></div>'+
         '</div></div>'+
         '<div class="sub"><div class="sub-title">Location</div>'+
         '<div class="grid2">'+
@@ -581,7 +585,7 @@ function bind(){
         var gradeMatch=stockGrade.toUpperCase()===reqGrade.toUpperCase();
         var lengthMatch=Math.abs(stockLength-reqLength)<0.1;
         if(gradeMatch&&lengthMatch){
-          S.roPieceStatus={ok:true,batch:batch,stockGrade:stockGrade,stockLength:stockLength,stockQty:String(item.availableStock||""),stockLoc:item.storageLocation||""};
+          S.roPieceStatus={ok:true,batch:batch,stockGrade:stockGrade,stockLength:stockLength,stockQty:String(item.availableStock||""),stockLoc:item.storageLocation||"",stockMatType:item.materialType||""};
         } else {
           S.roPieceStatus={mismatch:true,batch:batch,stockGrade:stockGrade,stockLength:stockLength,reqGrade:reqGrade,reqLength:reqLength};
         }
@@ -613,7 +617,8 @@ function bind(){
     if(!order||roActiveStep===null){alert("Error: order not found.");return;}
     var parts=String(roActiveStep).split('_');
     var secIdx=parseInt(parts[0]);var lotIdx=parseInt(parts[1]);
-    var lot=(order.sections[secIdx].lots||[])[lotIdx];
+    var sec2obj=order.sections[secIdx]||{};
+    var lot=(sec2obj.lots||[])[lotIdx];
     if(!lot){alert("Lot not found.");return;}
     // رفض التكرار — نفس الـ Batch No
     var batchNo=hn.trim()+strand.trim();
@@ -623,10 +628,14 @@ function bind(){
       },[]));
     },[]);
     if(allSubmitted.indexOf(batchNo)>=0){alert("\u274C Rejected — Batch No. "+batchNo+" was already submitted in this order!");return;}
+    var roMatType=(document.getElementById("ro_matType")||{}).value||"";
+    var roRollingSize=(document.getElementById("ro_rollingSize")||{}).value||sec2obj.sectionSize||"";
     var newP={
       heatNo:hn.trim(),strand:strand.trim(),batchNo:hn.trim()+strand.trim(),
       grade:status.ok?status.stockGrade:lot.grade,
       length:status.ok?String(status.stockLength):String(lot.length),
+      materialType:roMatType,
+      rollingSize:roRollingSize,
       quantity:qty,locationFrom:locFrom,locationTo:"Rolling Mill",
       remarks:remarks,workerName:S.workerName,workerId:S.workerId,
       time:fmtTime(new Date()),date:fmtDate(new Date())
