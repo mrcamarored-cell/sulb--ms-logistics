@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.1.6";
+const VERSION="v1.1.7";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -728,8 +728,10 @@ function bind(){
         timestamp:new Date().toLocaleString("en-GB")
       });
       rs.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});
+      // منع إعادة التسليم - إغلاق الـ lot نهائياً
+      await updateRollingOrderPieces(roActiveOrder,secIdx2,lotIdx2,lot2.submittedPieces,true);
       alert("✅ Submitted successfully! Supervisor can see it now.");
-      roActiveLength=null;draw();
+      roActiveStep=null;draw();
     }catch(e){alert("Error submitting: "+e.message);}
   };
   document.querySelectorAll("[data-ro-expand]").forEach(function(b){b.onclick=function(){ss({roExpandedOrder:S.roExpandedOrder===b.dataset.roExpand?null:b.dataset.roExpand});};});
