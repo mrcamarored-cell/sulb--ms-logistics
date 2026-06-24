@@ -697,7 +697,7 @@ function bind(){
     var rs=lot2.submittedPieces.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks,rollingLot:lot2.lotId,rollingSize:sec2.sectionSize};});
     try{
       await db.collection("deliveryNotes").add({
-        header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:li.submittedPieces[0].time||endStr,endTime:endStr},
+        header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:lot2.submittedPieces[0].time||endStr,endTime:endStr},
         rows:rs,submittedBy:S.uname,workerName:S.workerName,workerId:S.workerId,
         timeTaken:"N/A",listMode:"rolling",
         rollingOrderId:roActiveOrder,rollingLot:roActiveLot,
