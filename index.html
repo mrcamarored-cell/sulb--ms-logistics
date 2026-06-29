@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.3.4";
+const VERSION="v1.3.7";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -97,7 +97,7 @@ let allBatchNos=new Set(),startTime=null,stockData={},stockLastUpdate="",listMod
 // Stock search state — one var per field
 let stkHeat="",stkBatch="",stkGrade="",stkLength="",stkLocation="",stkMatType="";
 let roOrders=[],roActiveOrder=null,roActiveStep=null,roActiveLot=null,roActiveLength=null,roAiLoading=false,roPendingData=null,unsubRO=null;
-let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,transferWorkerScreen:false,roExpandedOrder:null,roEditingLot:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
+let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,transferWorkerScreen:false,trPieces:{},trLocTo:"",trSel:{},trBulkLoc:"",roExpandedOrder:null,roEditingLot:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
 let unsub=null,unsubReservations=null,unsubPresence=null;
 async function loadAllBatchNos(){try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){}}
 async function loadStockFromDB(){try{var snap=await db.collection("stock").get();stockData={};snap.docs.forEach(function(d){var data=d.data();if(data.batchNo)stockData[data.batchNo]=data;});var meta=await db.collection("settings").doc("stockMeta").get();stockLastUpdate=meta.exists?(meta.data().updatedAt||""):"";}catch(e){}}
@@ -431,42 +431,90 @@ function transferWorkerHTML(){
       '<div style="text-align:center;padding:40px;color:#4a6080">No pending transfers</div></div>';
   }
 
-  var t=myTransfers[0]; // show first pending
+  var t=myTransfers[0];
   var rows=t.rows||[];
+
+  if(t.status==="completed"){
+    return topbarW()+'<div class="wrap">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
+      '<button id="btnTransferBack" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Back</button></div>'+
+      '<div class="sbox"><div style="font-size:50px">&#9989;</div>'+
+      '<h3 style="color:#059669;margin:10px 0 4px">Task Done!</h3>'+
+      '<p style="color:#1e3a8a;font-weight:700">'+rows.length+' piece(s) transferred</p></div></div>';
+  }
+
+  if(!S.trPieces)S.trPieces={};
+  if(!S.trSel)S.trSel={};
+
+  var selCount=Object.keys(S.trSel).length;
+  var allDone=rows.every(function(row,i){return (S.trPieces[i]||{}).locationTo;});
+
+  // Assign panel — shown when pieces selected
+  var assignPanel=selCount>0?
+    '<div style="background:rgba(59,130,246,0.06);border:2px solid rgba(59,130,246,0.3);border-radius:12px;padding:14px;margin-bottom:14px">'+
+    '<p style="font-size:12px;font-weight:800;color:#1e3a8a;margin:0 0 10px">&#128205; Assign Location To — '+selCount+' piece(s) selected</p>'+
+    '<div style="display:flex;gap:8px;align-items:center">'+
+    '<input id="trBulkLoc" placeholder="e.g. Rolling Mill" value="'+(S.trBulkLoc||"")+'" style="flex:1;min-height:42px;height:42px;font-size:14px"/>'+
+    '<button id="btnAssignLoc" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:10px 16px;color:#fff;font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer">&#10003; Assign</button>'+
+    '</div></div>':'';
+
   var rh=rows.map(function(row,i){
-    return '<div class="row-card autofilled" style="margin-bottom:10px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-      '<span style="font-size:13px;font-weight:800;color:#1e3a8a">Piece #'+(i+1)+'</span>'+
-      '<span class="badge">'+row.batchNo+'</span></div>'+
-      '<div class="grid3" style="margin-bottom:8px">'+
-      '<div><label class="lbl">Grade</label><input value="'+(row.grade||"")+'" readonly/></div>'+
-      '<div><label class="lbl">Length (m)</label><input value="'+(row.length||"")+'" readonly/></div>'+
-      '<div><label class="lbl">Material Type</label><input value="'+(row.materialType||"")+'" readonly/></div>'+
+    var piece=S.trPieces[i]||{};
+    var locTo=piece.locationTo||"";
+    var confirmed=!!locTo;
+    var isSel=!!S.trSel[i];
+
+    return '<div style="background:'+(confirmed?'rgba(16,185,129,0.04)':isSel?'rgba(59,130,246,0.04)':'#fff')+
+      ';border:2px solid '+(confirmed?'rgba(16,185,129,0.35)':isSel?'rgba(59,130,246,0.4)':'rgba(30,58,138,0.12)')+
+      ';border-radius:12px;padding:12px;margin-bottom:10px">'+
+
+      // Header row: checkbox + badge + status
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'+
+      '<input type="checkbox" class="tr-sel-chk" data-ti="'+i+'" '+(isSel?'checked':'')+
+      ' style="width:20px;height:20px;accent-color:#1e3a8a;cursor:pointer;flex-shrink:0;min-height:auto"/>'+
+      '<div style="flex:1;min-width:0">'+
+      '<span style="font-size:13px;font-weight:800;color:#1e3a8a">'+row.batchNo+'</span>'+
+      (confirmed?'<span style="margin-left:8px;font-size:11px;color:#059669;font-weight:700">&#10003; '+locTo+'</span>':'')+
       '</div>'+
-      '<div class="grid2" style="margin-bottom:8px">'+
-      '<div><label class="lbl">Rolling Size</label><input value="'+(row.rollingSize||"")+'" readonly/></div>'+
-      '<div><label class="lbl">From</label><input value="'+(row.locationFrom||"")+'" readonly/></div>'+
+      (confirmed?'<span style="font-size:18px;color:#059669">&#10003;</span>':
+       '<span style="font-size:11px;color:#d97706;font-weight:600">&#9888; Needs location</span>')+
       '</div>'+
-      '<div class="grid3">'+
-      '<div><label class="lbl">To <span style="color:#dc2626">*</span></label>'+
-      '<input class="tr-loc-to" data-ti="'+i+'" placeholder="e.g. Melt" value="'+(row.locationTo||'')+'"/></div>'+
-      '<div><label class="lbl">Qty (MT) <span style="color:#dc2626">*</span></label>'+
-      '<input class="tr-qty" data-ti="'+i+'" placeholder="e.g. 1" inputmode="decimal" value="'+(row.quantity||'')+'"/></div>'+
-      '<div><label class="lbl">Remarks</label>'+
-      '<select class="tr-remarks" data-ti="'+i+'" style="background:#fff">'+
-      '<option value="">-- Select --</option>'+
-      remarksOptions.map(function(opt){return '<option value="'+opt+'"'+(row.remarks===opt?' selected':'')+'>'+opt+'</option>';}).join('')+
-      '</select></div>'+
-      '</div></div>';
+
+      // Piece details — compact grid
+      '<div style="background:rgba(30,58,138,0.03);border-radius:8px;padding:8px 10px;margin-bottom:10px">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:11px">'+
+      '<div><span style="color:#4a6080">Grade: </span><span style="font-weight:700;color:#1e3a8a">'+row.grade+'</span></div>'+
+      '<div><span style="color:#4a6080">Length: </span><span style="font-weight:700;color:#1e3a8a">'+row.length+'m</span></div>'+
+      '<div><span style="color:#4a6080">Material: </span><span style="font-weight:700;color:#2563eb">'+row.materialType+'</span></div>'+
+      '<div><span style="color:#4a6080">From: </span><span style="font-weight:700;color:#059669">'+row.locationFrom+'</span></div>'+
+      '</div>'+
+      '</div>'+
+
+      // Location To input
+      '<div style="display:flex;gap:8px;align-items:center">'+
+      '<label style="font-size:11px;font-weight:700;color:#4a6080;white-space:nowrap;flex-shrink:0">To:</label>'+
+      '<input class="tr-loc-ind" data-ti="'+i+'" placeholder="Location To" value="'+locTo+
+      '" style="flex:1;height:40px;min-height:40px;font-size:13px;'+(confirmed?'border-color:rgba(16,185,129,0.4);background:rgba(16,185,129,0.04);':'')+'"/>'+
+      '</div>'+
+      '</div>';
   }).join('');
+
+  var doneCount=rows.filter(function(row,i){return !!(S.trPieces[i]||{}).locationTo;}).length;
 
   return topbarW()+'<div class="wrap">'+
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
     '<button id="btnTransferBack" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Back</button>'+
     '<div><p style="font-size:15px;font-weight:800;color:#1e3a8a;margin:0">&#128666; Transfer Order</p>'+
-    '<p style="font-size:11px;color:#4a6080;margin:0">By: '+t.createdBy+' | '+t.date+' | '+rows.length+' piece(s)</p></div></div>'+
-    '<div class="card"><div class="card-title">Pieces to Transfer</div>'+rh+'</div>'+
-    '<button class="bp" id="btnSubmitTransfer"'+(S.saving?' disabled style="opacity:0.6"':'')+'>'+(S.saving?'Saving...':'Submit Transfer &#10003;')+'</button>'+
+    '<p style="font-size:11px;color:#4a6080;margin:0">'+t.createdBy+' | '+t.date+' | '+
+    '<span style="color:'+(allDone?'#059669':'#d97706')+';font-weight:700">'+doneCount+'/'+rows.length+' assigned</span></p>'+
+    '</div></div>'+
+    assignPanel+
+    '<div class="card" style="padding:14px">'+rh+'</div>'+
+    (allDone?
+      '<button class="bp" id="btnSubmitTransfer"'+(S.saving?' disabled style="opacity:0.6"':'')+'>'+
+      (S.saving?'Saving...':'Submit Transfer &#10003;')+'</button>':
+      '<div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:10px 14px;text-align:center;font-size:12px;color:#d97706;font-weight:600;margin-top:6px">'+
+      '&#9888; Assign Location To for all pieces to submit</div>')+
     '</div>';
 }
 function roWorkerHTML(){
@@ -864,63 +912,85 @@ function bind(){
   // Worker: back from transfer screen
   var btnTransferBack=document.getElementById("btnTransferBack");
   if(btnTransferBack){btnTransferBack.onclick=function(){ss({transferWorkerScreen:false});};}
-  // Worker: edit transfer row fields
-  document.querySelectorAll(".tr-loc-to").forEach(function(el){
+  // Transfer: select checkboxes
+  document.querySelectorAll(".tr-sel-chk").forEach(function(chk){
+    chk.onchange=function(){
+      var ti=parseInt(chk.dataset.ti);
+      if(!S.trSel)S.trSel={};
+      if(chk.checked)S.trSel[ti]=true;
+      else delete S.trSel[ti];
+      draw();
+    };
+  });
+  // Transfer: individual location to input
+  document.querySelectorAll(".tr-loc-ind").forEach(function(el){
     el.addEventListener("input",function(){
       var ti=parseInt(el.dataset.ti);
-      var myT=transferOrders.filter(function(t){return t.assignedWorkerId===S.workerId;})[0];
-      if(myT&&myT.rows[ti])myT.rows[ti].locationTo=el.value;
+      if(!S.trPieces)S.trPieces={};
+      if(!S.trPieces[ti])S.trPieces[ti]={};
+      S.trPieces[ti].locationTo=el.value;
+      // no full redraw — just update state
     });
+    el.addEventListener("change",function(){draw();});
   });
-  document.querySelectorAll(".tr-qty").forEach(function(el){
-    el.addEventListener("input",function(){
-      var ti=parseInt(el.dataset.ti);
-      var myT=transferOrders.filter(function(t){return t.assignedWorkerId===S.workerId;})[0];
-      if(myT&&myT.rows[ti])myT.rows[ti].quantity=el.value;
+  // Transfer: bulk location input
+  var trBulkLoc=document.getElementById("trBulkLoc");
+  if(trBulkLoc){
+    trBulkLoc.addEventListener("input",function(e){
+      S.trBulkLoc=e.target.value;
+      var cur=e.target.selectionStart;
+      document.getElementById("app").innerHTML=html();bind();
+      var ns=document.getElementById("trBulkLoc");
+      if(ns){ns.focus();try{ns.setSelectionRange(cur,cur);}catch(ex){}}
     });
-  });
-  document.querySelectorAll(".tr-remarks").forEach(function(el){
-    el.addEventListener("change",function(){
-      var ti=parseInt(el.dataset.ti);
-      var myT=transferOrders.filter(function(t){return t.assignedWorkerId===S.workerId;})[0];
-      if(myT&&myT.rows[ti])myT.rows[ti].remarks=el.value;
+  }
+  // Transfer: assign bulk location to selected
+  var btnAssignLoc=document.getElementById("btnAssignLoc");
+  if(btnAssignLoc){btnAssignLoc.onclick=function(){
+    var loc=(S.trBulkLoc||"").trim();
+    if(!loc){alert("Enter a location first.");return;}
+    if(!S.trPieces)S.trPieces={};
+    Object.keys(S.trSel||{}).forEach(function(ti){
+      if(!S.trPieces[ti])S.trPieces[ti]={};
+      S.trPieces[ti].locationTo=loc;
     });
-  });
+    S.trSel={};S.trBulkLoc="";draw();
+  };}
   // Worker: submit transfer
   var btnSubmitTransfer=document.getElementById("btnSubmitTransfer");
   if(btnSubmitTransfer){btnSubmitTransfer.onclick=async function(){
+    if(btnSubmitTransfer.disabled)return;
     var myT=transferOrders.filter(function(t){return t.assignedWorkerId===S.workerId;})[0];
     if(!myT){alert("No transfer order found.");return;}
     var rows=myT.rows||[];
-    // validate
-    var missing=rows.filter(function(r){return !r.locationTo||!r.quantity;});
-    if(missing.length){alert("Please fill Location To and Qty for all pieces.");return;}
+    var missing=rows.filter(function(r,i){return !(S.trPieces&&S.trPieces[i]&&S.trPieces[i].locationTo);});
+    if(missing.length){alert("Please assign Location To for all pieces.");return;}
     if(!confirm("Submit "+rows.length+" piece(s)?"))return;
+    btnSubmitTransfer.disabled=true;btnSubmitTransfer.textContent="Saving...";
     ss({saving:true});
     try{
       var endT=new Date();var endStr=fmtTime(endT);
-      var rs=rows.map(function(r){
-        return {heatNo:r.heatNo,strand:r.strand,batchNo:r.batchNo,grade:r.grade,
-          length:r.length,materialType:r.materialType,rollingSize:r.rollingSize,
-          quantity:r.quantity,locationFrom:r.locationFrom,locationTo:r.locationTo,
-          remarks:r.remarks||""};
+      var rs=rows.map(function(r,i){
+        var piece=S.trPieces[i]||{};
+        return {heatNo:r.heatNo||"",strand:r.strand||"",batchNo:r.batchNo||"",
+          grade:r.grade||"",length:String(r.length||""),materialType:r.materialType||"",
+          rollingSize:r.rollingSize||"",quantity:String(r.availableStock||""),
+          locationFrom:r.locationFrom||"",locationTo:piece.locationTo||"",remarks:""};
       });
       await db.collection("deliveryNotes").add({
         header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:endStr,endTime:endStr},
         rows:rs,submittedBy:S.uname,workerName:S.workerName,workerId:S.workerId,
-        timeTaken:"N/A",listMode:"transfer",
-        transferOrderId:myT.id,
+        timeTaken:"N/A",listMode:"transfer",transferOrderId:myT.id,
         createdAt:firebase.firestore.FieldValue.serverTimestamp(),
         timestamp:new Date().toLocaleString("en-GB")
       });
-      // mark transfer as done
       await db.collection("transferOrders").doc(myT.id).update({status:"completed",completedAt:firebase.firestore.FieldValue.serverTimestamp()});
+      var idx2=transferOrders.findIndex(function(t){return t.id===myT.id;});
+      if(idx2>=0)transferOrders[idx2].status="completed";
       rs.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});
-      alert("✅ Transfer submitted successfully!");
-      ss({saving:false,transferWorkerScreen:false});
-    }catch(e){alert("Error: "+e.message);ss({saving:false});}
+      ss({saving:false,trPieces:{},trSel:{},trBulkLoc:""});
+    }catch(e){alert("Error: "+e.message);ss({saving:false});btnSubmitTransfer.disabled=false;btnSubmitTransfer.textContent="Submit Transfer \u2713";}
   };}
-
   // Stock search inputs — live per-field filtering
   function bindStkInput(id,setter,getterFn){
     var el=document.getElementById(id);
