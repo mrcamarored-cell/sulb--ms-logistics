@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.3.0";
+const VERSION="v1.3.1";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -369,10 +369,10 @@ async function saveTransferOrder(pieces,assignedWorkerId,assignedWorkerName){
 }
 function listenTransferOrders(){
   if(unsubTransfers)unsubTransfers();
-  unsubTransfers=db.collection("transferOrders").where("status","==","pending").onSnapshot(function(snap){
-    transferOrders=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});
+  unsubTransfers=db.collection("transferOrders").orderBy("createdAt","desc").onSnapshot(function(snap){
+    transferOrders=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());}).filter(function(t){return t.status==="pending";});
     draw();
-  });
+  },function(err){console.warn("transferOrders listener error:",err);});
 }
 function draw(){var active=document.activeElement;var aid=active?active.id:null;var adr=active?active.dataset.r:null;var adf=active?active.dataset.f:null;var ac=active&&active.selectionStart!=null?active.selectionStart:null;document.getElementById("app").innerHTML=html();bind();if(aid){var el=document.getElementById(aid);if(el){el.focus();if(ac!=null){try{el.setSelectionRange(ac,ac);}catch(e){}}}}else if(adr!=null&&adf!=null){var inputs=document.querySelectorAll(".ri");for(var i=0;i<inputs.length;i++){if(inputs[i].dataset.r===adr&&inputs[i].dataset.f===adf){inputs[i].focus();if(ac!=null){try{inputs[i].setSelectionRange(ac,ac);}catch(e){}}break;}}}}
 function html(){if(S.logoutMsg)return logoutHTML();if(!S.role)return loginHTML();if(S.role==="worker"&&S.workerStep)return workerIdHTML();if(S.role==="worker"&&S.transferWorkerScreen)return transferWorkerHTML();if(S.role==="worker"&&S.roWorkerScreen)return roWorkerHTML();if(S.role==="worker")return workerHTML();if(S.role==="supervisor"&&S.supervisorStep)return supervisorIdHTML();if(S.role==="supervisor"&&showMappingScreen)return mappingScreenHTML();if(S.role==="supervisor")return supHTML();if(S.role==="admin"&&showMappingScreen)return mappingScreenHTML();if(S.role==="admin")return adminHTML();return loginHTML();}
@@ -791,10 +791,10 @@ function supBody(){var tab=S.supTab||"requests";
   return '';}
 function bind(){
   var bl=document.getElementById("btnLogin");
-  if(bl) bl.onclick=async function(){var u=document.getElementById("iu").value.trim();var p=document.getElementById("ip").value;await loadPasswords();var c=CREDS[u];if(c&&c.pw===p){if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}else if(c.role==="supervisor"){await loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}else if(c.role==="admin"){await Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]);load();loadStockFromDB();listenReservations();listenRollingOrders();listenTransferOrders();listenPresence();ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});}}else document.getElementById("le").style.display="block";};
+  if(bl) bl.onclick=async function(){var u=document.getElementById("iu").value.trim();var p=document.getElementById("ip").value;await loadPasswords();var c=CREDS[u];if(c&&c.pw===p){if(c.role==="worker"){loadRemarks();ss({role:c.role,uname:u,workerStep:true,workerIdErr:""});}else if(c.role==="supervisor"){await loadDynamicSupervisors();ss({role:c.role,uname:u,supervisorStep:true,supervisorIdErr:""});}else if(c.role==="admin"){await Promise.all([loadRemarks(),loadDynamicWorkers(),loadDynamicSupervisors()]);ss({role:c.role,uname:u,adminTab:"online",onlineUsers:[]});load();loadStockFromDB();listenReservations();listenRollingOrders();listenTransferOrders();listenPresence();}}else document.getElementById("le").style.display="block";};
   var tp2=document.getElementById("tp");if(tp2) tp2.onclick=function(){var i=document.getElementById("ip");i.type=i.type==="password"?"text":"password";};
   var bwid=document.getElementById("btnWid");
-  if(bwid) bwid.onclick=async function(){var id=document.getElementById("wid").value.trim().padStart(3,"0");await loadDynamicWorkers();var dw=S.dynamicWorkers||WORKERS;var name=dw[id];if(!name){ss({workerIdErr:"ID not found."});return;}await loadAllBatchNos();await loadStockFromDB();await loadListMode();listenReservations();listenRollingOrders();listenTransferOrders();startTime=null;registerPresence(name+' ('+id+')','Worker');ss({workerStep:false,workerId:id,workerName:name,workerIdErr:"",submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:name,startTime:"",endTime:""}});};
+  if(bwid) bwid.onclick=async function(){var id=document.getElementById("wid").value.trim().padStart(3,"0");await loadDynamicWorkers();var dw=S.dynamicWorkers||WORKERS;var name=dw[id];if(!name){ss({workerIdErr:"ID not found."});return;}await loadAllBatchNos();await loadStockFromDB();await loadListMode();startTime=null;registerPresence(name+' ('+id+')','Worker');ss({workerStep:false,workerId:id,workerName:name,workerIdErr:"",submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:name,startTime:"",endTime:""}});listenReservations();listenRollingOrders();listenTransferOrders();};
   var bsid=document.getElementById("btnSid");
   if(bsid) bsid.onclick=async function(){var sid=document.getElementById("sid").value.trim().toUpperCase();await loadDynamicSupervisors();var sname=dynamicSupervisors[sid];if(!sname){ss({supervisorIdErr:"ID not found."});return;}await loadDynamicWorkers();ss({supervisorStep:false,supervisorId:sid,supervisorName:sname,supervisorIdErr:"",submitted:false,supTab:"requests"});load();loadStockFromDB();listenReservations();listenRollingOrders();listenTransferOrders();registerPresence(sname+' ('+sid+')','Supervisor');};
   var btnRefresh=document.getElementById("btnRefresh");if(btnRefresh) btnRefresh.onclick=async function(){await loadRemarks();await loadStockFromDB();if(S.role==="supervisor"||S.role==="admin"){load();}draw();};
