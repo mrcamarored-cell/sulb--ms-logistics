@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.2.4";
+const VERSION="v1.2.5";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -671,7 +671,12 @@ function bind(){
   var bn=document.getElementById("btnNew");if(bn) bn.onclick=async function(){await releaseMyReservations();startTime=null;await loadAllBatchNos();await loadStockFromDB();ss({submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:"",endTime:""}});};
   var ba=document.getElementById("btnAdd");if(ba) ba.onclick=function(){ss({rows:S.rows.concat([er()])});};
   document.querySelectorAll(".ro-remove-lot").forEach(function(b){b.onclick=function(){b.closest(".ro-manual-lot").remove();};});
-  document.querySelectorAll("[data-admintab]").forEach(function(b){b.onclick=function(){ss({adminTab:b.dataset.admintab});};});
+  document.querySelectorAll("[data-admintab]").forEach(function(b){
+    b.onclick=function(){
+      if(b.dataset.admintab==="searchfix"){stkHeat="";stkBatch="";stkGrade="";stkLength="";stkLocation="";stkMatType="";}
+      ss({adminTab:b.dataset.admintab});
+    };
+  });
   var tabReq=document.getElementById("tabReq");if(tabReq) tabReq.onclick=function(){ss({supTab:"requests"});};
   var tabRO=document.getElementById("tabRO");if(tabRO) tabRO.onclick=function(){ss({supTab:"rolling"});};
   var tabStock=document.getElementById("tabStock");if(tabStock) tabStock.onclick=function(){ss({supTab:"stock"});};
@@ -683,9 +688,11 @@ function bind(){
     if(!el)return;
     el.addEventListener("input",function(e){
       setter(e.target.value);
-      var app=document.getElementById("app");app.innerHTML=html();bind();
+      var cur=e.target.selectionStart;
+      document.getElementById("app").innerHTML=html();
+      bind();
       var ns=document.getElementById(id);
-      if(ns){ns.focus();try{ns.setSelectionRange(getterFn().length,getterFn().length);}catch(ex){}}
+      if(ns){ns.focus();try{ns.setSelectionRange(cur,cur);}catch(ex){}}
     });
   }
   bindStkInput("stkHeat",function(v){stkHeat=v;},function(){return stkHeat;});
