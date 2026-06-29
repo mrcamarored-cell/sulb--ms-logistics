@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.1.8";
+const VERSION="v1.2.0";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -93,7 +93,7 @@ function fmtTime(d){return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"
 function fmtDate(d){return d.toISOString().slice(0,10);}
 function timeDiff(s,e){var diff=Math.floor((e-s)/1000);var h=Math.floor(diff/3600);var m=Math.floor((diff%3600)/60);var sc=diff%60;return(h>0?h+"h ":"")+m+"m "+sc+"s";}
 let allBatchNos=new Set(),startTime=null,stockData={},stockLastUpdate="",listMode="open",reservedBatches={},myReservations=[],searchQuery="";
-let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,roExpandedOrder:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
+let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,roExpandedOrder:null,roEditingLot:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
 let unsub=null,unsubReservations=null,unsubPresence=null;
 async function loadAllBatchNos(){try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){}}
 async function loadStockFromDB(){try{var snap=await db.collection("stock").get();stockData={};snap.docs.forEach(function(d){var data=d.data();if(data.batchNo)stockData[data.batchNo]=data;});var meta=await db.collection("settings").doc("stockMeta").get();stockLastUpdate=meta.exists?(meta.data().updatedAt||""):"";}catch(e){}}
@@ -128,6 +128,49 @@ async function toggleLotClosed(orderId,secIdx,lotIdx,forceOpen){
     var sections=JSON.parse(JSON.stringify(order.sections||[]));
     if(!sections[secIdx]||!sections[secIdx].lots[lotIdx])return;
     sections[secIdx].lots[lotIdx].closed=forceOpen?false:true;
+    await db.collection("rollingOrders").doc(orderId).update({sections:sections});
+  }catch(e){alert("Error: "+e.message);}
+}
+async function moveLotUp(orderId,secIdx,lotIdx){
+  try{
+    if(lotIdx===0)return;
+    var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;
+    var sections=JSON.parse(JSON.stringify(order.sections||[]));
+    if(!sections[secIdx])return;
+    var lots=sections[secIdx].lots||[];
+    var tmp=lots[lotIdx-1];lots[lotIdx-1]=lots[lotIdx];lots[lotIdx]=tmp;
+    sections[secIdx].lots=lots;
+    await db.collection("rollingOrders").doc(orderId).update({sections:sections});
+  }catch(e){alert("Error: "+e.message);}
+}
+async function moveLotDown(orderId,secIdx,lotIdx){
+  try{
+    var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;
+    var sections=JSON.parse(JSON.stringify(order.sections||[]));
+    if(!sections[secIdx])return;
+    var lots=sections[secIdx].lots||[];
+    if(lotIdx>=lots.length-1)return;
+    var tmp=lots[lotIdx+1];lots[lotIdx+1]=lots[lotIdx];lots[lotIdx]=tmp;
+    sections[secIdx].lots=lots;
+    await db.collection("rollingOrders").doc(orderId).update({sections:sections});
+  }catch(e){alert("Error: "+e.message);}
+}
+async function deleteLotFromOrder(orderId,secIdx,lotIdx){
+  try{
+    var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;
+    var sections=JSON.parse(JSON.stringify(order.sections||[]));
+    if(!sections[secIdx])return;
+    sections[secIdx].lots.splice(lotIdx,1);
+    await db.collection("rollingOrders").doc(orderId).update({sections:sections});
+  }catch(e){alert("Error: "+e.message);}
+}
+async function updateLotData(orderId,secIdx,lotIdx,newLotId,newGrade,newLength,newPcs){
+  try{
+    var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;
+    var sections=JSON.parse(JSON.stringify(order.sections||[]));
+    if(!sections[secIdx]||!sections[secIdx].lots[lotIdx])return;
+    var lot=sections[secIdx].lots[lotIdx];
+    lot.lotId=newLotId;lot.grade=newGrade;lot.length=newLength;lot.requiredPcs=newPcs;lot.key=newGrade+"_"+newLength;
     await db.collection("rollingOrders").doc(orderId).update({sections:sections});
   }catch(e){alert("Error: "+e.message);}
 }
@@ -416,20 +459,45 @@ function roSupHTML(){
               '<button data-ro-sec-del="'+o.id+'" data-ro-si="'+si+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:5px;padding:3px 8px;color:#dc2626;font-size:10px;font-weight:700;cursor:pointer">&#128465;</button>'+
               '</div></div>'+
               (sec.lots||[]).map(function(lot,li){
-                var ld=(lot.submittedPieces||[]).length;var lr=lot.requiredPcs;var ok=ld>=lr;
-                return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1px solid rgba(30,58,138,0.08);border-radius:8px;margin-bottom:4px">'+
+                var ld=(lot.submittedPieces||[]).length;var lr=lot.requiredPcs;var ok=ld>=lr||lot.submitted;
+                var isEditingLot=S.roEditingLot===o.id+'_'+si+'_'+li;
+                return '<div style="background:'+(ok?'rgba(16,185,129,0.03)':'#fff')+';border:1px solid '+(ok?'rgba(16,185,129,0.2)':'rgba(30,58,138,0.08)')+';border-radius:8px;padding:10px;margin-bottom:6px">'+
+                  // رأس الـ lot
+                  '<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(isEditingLot?'10px':'0')+'">'+
                   '<div style="width:22px;height:22px;border-radius:50%;background:'+(ok?'#10b981':lot.closed?'#d97706':'rgba(30,58,138,0.12)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
                   '<span style="font-size:10px;font-weight:800;color:'+(ok||lot.closed?'#fff':'#4a6080')+'">'+(ok?'&#10003;':lot.closed?'&#9208;':(li+1))+'</span></div>'+
-                  '<div style="flex:1"><p style="font-size:11px;font-weight:700;color:#1e3a8a;margin:0">&#128202; '+lot.lotId+' | '+lot.length+'m | '+lot.grade+'</p>'+
+                  '<div style="flex:1"><p style="font-size:11px;font-weight:700;color:#1e3a8a;margin:0">&#128202; '+lot.lotId+' &nbsp;|&nbsp; '+lot.length+'m &nbsp;|&nbsp; '+lot.grade+' &nbsp;|&nbsp; Pcs: '+lot.requiredPcs+'</p></div>'+
+                  '<span class="counter-badge '+(ok?'counter-done':'counter-ok')+'" style="font-size:10px">'+ld+'/'+lr+'</span>'+
+                  // أزرار التحكم
+                  '<div style="display:flex;gap:3px;flex-shrink:0">'+
+                  (li>0?'<button data-lot-up="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:4px;padding:2px 6px;color:#1e3a8a;font-size:10px;cursor:pointer">&#9650;</button>':'')+
+                  (li<(sec.lots||[]).length-1?'<button data-lot-down="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:4px;padding:2px 6px;color:#1e3a8a;font-size:10px;cursor:pointer">&#9660;</button>':'')+
+                  (!ok?'<button data-lot-edit="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:4px;padding:2px 6px;color:#2563eb;font-size:10px;cursor:pointer">&#9998;</button>':'')+
+                  (!ok?'<button data-lot-del="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#128465;</button>':'')+
+                  '</div></div>'+
+                  // نموذج التعديل
+                  (isEditingLot?
+                    '<div style="background:rgba(59,130,246,0.04);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px;margin-top:6px">'+
+                    '<div style="margin-bottom:6px"><label style="font-size:10px;color:#4a6080;font-weight:600;display:block">Lot ID</label>'+
+                    '<input id="editLotId_'+si+'_'+li+'" value="'+lot.lotId+'" style="width:100%;padding:6px 8px;border:1px solid rgba(30,58,138,0.2);border-radius:6px;font-size:12px;color:#1e3a8a;background:#fff"/></div>'+
+                    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">'+
+                    '<div><label style="font-size:10px;color:#4a6080;font-weight:600;display:block">Grade</label><input id="editGrade_'+si+'_'+li+'" value="'+lot.grade+'" style="width:100%;padding:6px 8px;border:1px solid rgba(30,58,138,0.2);border-radius:6px;font-size:12px;color:#1e3a8a;background:#fff"/></div>'+
+                    '<div><label style="font-size:10px;color:#4a6080;font-weight:600;display:block">Length (m)</label><input id="editLength_'+si+'_'+li+'" value="'+lot.length+'" inputmode="decimal" style="width:100%;padding:6px 8px;border:1px solid rgba(30,58,138,0.2);border-radius:6px;font-size:12px;color:#1e3a8a;background:#fff"/></div>'+
+                    '<div><label style="font-size:10px;color:#4a6080;font-weight:600;display:block">Req. Pcs</label><input id="editPcs_'+si+'_'+li+'" value="'+lot.requiredPcs+'" inputmode="numeric" style="width:100%;padding:6px 8px;border:1px solid rgba(30,58,138,0.2);border-radius:6px;font-size:12px;color:#1e3a8a;background:#fff"/></div>'+
+                    '</div>'+
+                    '<div style="display:flex;gap:6px">'+
+                    '<button data-lot-save="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="flex:2;background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:6px;padding:6px;color:#fff;font-weight:700;font-size:11px;cursor:pointer">&#10003; Save</button>'+
+                    '<button data-lot-cancel style="flex:1;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:6px;padding:6px;color:#1e3a8a;font-size:11px;cursor:pointer">Cancel</button>'+
+                    '</div></div>':'')+ 
+                  // القطع المدخلة
                   ((lot.submittedPieces||[]).length>0?
-                    '<div style="margin-top:4px">'+lot.submittedPieces.map(function(p,pi){
-                      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0">'+
+                    '<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(30,58,138,0.06)">'+
+                    lot.submittedPieces.map(function(p,pi){
+                      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0">'+
                         '<p style="font-size:10px;color:#1e3a8a;margin:0;font-weight:600">'+(p.batchNo||'--')+'</p>'+
-                        '<button data-ro-rm-order="'+o.id+'" data-ro-rm-si="'+si+'" data-ro-rm-li="'+li+'" data-ro-rm-pi="'+pi+'" style="background:rgba(220,38,38,0.1);border:none;border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#10005;</button>'+
+                        (!lot.submitted?'<button data-ro-rm-order="'+o.id+'" data-ro-rm-si="'+si+'" data-ro-rm-li="'+li+'" data-ro-rm-pi="'+pi+'" style="background:rgba(220,38,38,0.1);border:none;border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#10005;</button>':'')+
                         '</div>';
-                    }).join('')+'</div>':'')+'</div>'+
-                  '<span class="counter-badge '+(ok?'counter-done':'counter-ok')+'">'+ld+'/'+lr+'</span>'+
-                  '</div>';
+                    }).join('')+'</div>':'')+'</div>';
               }).join('')+
               '</div>';
           }).join('')+
@@ -555,6 +623,22 @@ function bind(){
   document.querySelectorAll("[data-ro-sec-open]").forEach(function(b){b.onclick=async function(){await toggleSectionClosed(b.dataset.roSecOpen,parseInt(b.dataset.roSi),true);};});
   document.querySelectorAll("[data-ro-sec-close]").forEach(function(b){b.onclick=async function(){await toggleSectionClosed(b.dataset.roSecClose,parseInt(b.dataset.roSi),false);};});
   document.querySelectorAll("[data-ro-sec-del]").forEach(function(b){b.onclick=async function(){if(!confirm("Delete this section?"))return;await deleteSectionFromOrder(b.dataset.roSecDel,parseInt(b.dataset.roSi));};});
+  // Lot controls
+  document.querySelectorAll("[data-lot-up]").forEach(function(b){b.onclick=async function(){await moveLotUp(b.dataset.lotUp,parseInt(b.dataset.roSi),parseInt(b.dataset.roLi));};});
+  document.querySelectorAll("[data-lot-down]").forEach(function(b){b.onclick=async function(){await moveLotDown(b.dataset.lotDown,parseInt(b.dataset.roSi),parseInt(b.dataset.roLi));};});
+  document.querySelectorAll("[data-lot-del]").forEach(function(b){b.onclick=async function(){if(!confirm("Delete this lot?"))return;await deleteLotFromOrder(b.dataset.lotDel,parseInt(b.dataset.roSi),parseInt(b.dataset.roLi));};});
+  document.querySelectorAll("[data-lot-edit]").forEach(function(b){b.onclick=function(){ss({roEditingLot:b.dataset.lotEdit+'_'+b.dataset.roSi+'_'+b.dataset.roLi});};});
+  document.querySelectorAll("[data-lot-cancel]").forEach(function(b){b.onclick=function(){ss({roEditingLot:null});};});
+  document.querySelectorAll("[data-lot-save]").forEach(function(b){b.onclick=async function(){
+    var si=parseInt(b.dataset.roSi);var li=parseInt(b.dataset.roLi);
+    var newId=(document.getElementById("editLotId_"+si+"_"+li)||{}).value||"";
+    var newGrade=(document.getElementById("editGrade_"+si+"_"+li)||{}).value||"";
+    var newLength=parseFloat((document.getElementById("editLength_"+si+"_"+li)||{}).value||0)||0;
+    var newPcs=parseInt((document.getElementById("editPcs_"+si+"_"+li)||{}).value||0)||0;
+    if(!newId||!newGrade||!newLength||!newPcs){alert("Please fill all fields.");return;}
+    await updateLotData(b.dataset.lotSave,si,li,newId,newGrade,newLength,newPcs);
+    ss({roEditingLot:null});
+  };});
   document.querySelectorAll("[data-ro-order]").forEach(function(b){b.onclick=function(){roActiveOrder=b.dataset.roOrder;roActiveLot=null;roActiveLength=null;draw();};});
   document.querySelectorAll("[data-ro-lot]").forEach(function(b){if(!b.dataset.roOrder)b.onclick=function(){roActiveLot=b.dataset.roLot;roActiveLength=null;draw();};});
   document.querySelectorAll("[data-ro-length]").forEach(function(b){b.onclick=function(){roActiveLength=b.dataset.roLength;draw();};});
