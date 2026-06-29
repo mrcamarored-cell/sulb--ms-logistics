@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.2.3";
+const VERSION="v1.2.4";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -219,7 +219,7 @@ function getStockSearchResults(){
     if(heatQ&&!(item.heatNo||"").toLowerCase().includes(heatQ))return false;
     if(batchQ&&!(item.batchNo||"").toLowerCase().includes(batchQ))return false;
     if(gradeQ&&!(item.grade||"").toLowerCase().includes(gradeQ))return false;
-    if(lenQ&&!isNaN(lenVal)&&Math.abs(parseFloat(item.length||0)-lenVal)>=0.11)return false;
+    if(lenQ&&!isNaN(lenVal)&&parseFloat(item.length||0)!==lenVal)return false;
     if(locQ&&!(item.storageLocation||"").toLowerCase().includes(locQ)&&!(item.storageBin||"").toLowerCase().includes(locQ))return false;
     if(matQ&&!(item.materialType||"").toLowerCase().includes(matQ))return false;
     return true;
