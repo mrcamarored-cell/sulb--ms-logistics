@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.2.0";
+const VERSION="v1.2.1";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -93,6 +93,8 @@ function fmtTime(d){return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"
 function fmtDate(d){return d.toISOString().slice(0,10);}
 function timeDiff(s,e){var diff=Math.floor((e-s)/1000);var h=Math.floor(diff/3600);var m=Math.floor((diff%3600)/60);var sc=diff%60;return(h>0?h+"h ":"")+m+"m "+sc+"s";}
 let allBatchNos=new Set(),startTime=null,stockData={},stockLastUpdate="",listMode="open",reservedBatches={},myReservations=[],searchQuery="";
+// Stock search state
+let stockSearchText="",stockSearchLength="",stockSearchLocation="";
 let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,roExpandedOrder:null,roEditingLot:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
 let unsub=null,unsubReservations=null,unsubPresence=null;
 async function loadAllBatchNos(){try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){}}
@@ -202,6 +204,100 @@ async function deleteSectionFromOrder(orderId,secIdx){
 }
 async function removePieceFromRO(orderId,lotId,lengthKey,pieceIdx){try{var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;var lots=JSON.parse(JSON.stringify(order.lots||[]));var lot=lots.find(function(l){return l.id===lotId;});if(!lot)return;var li=lot.lengths.find(function(l){return l.key===lengthKey;});if(!li)return;li.submittedPieces=(li.submittedPieces||[]).filter(function(_,i){return i!==pieceIdx;});if(li.submittedPieces.length<li.requiredPcs)li.closed=false;await db.collection("rollingOrders").doc(orderId).update({lots:lots});}catch(e){alert("Error: "+e.message);}}
 
+// ===================== STOCK SEARCH HELPER =====================
+function getStockSearchResults(){
+  var textQ=(stockSearchText||"").trim().toLowerCase();
+  var lenQ=stockSearchLength.trim();
+  var locQ=(stockSearchLocation||"").trim().toLowerCase();
+  var lenVal=parseFloat(lenQ);
+  var hasFilter=textQ||lenQ||locQ;
+  if(!hasFilter)return null; // null = no search yet
+  var results=[];
+  Object.keys(stockData).forEach(function(k){
+    var item=stockData[k];
+    var matchText=!textQ||(
+      (item.heatNo||"").toLowerCase().includes(textQ)||
+      (item.strand||"").toLowerCase().includes(textQ)||
+      (item.batchNo||"").toLowerCase().includes(textQ)||
+      (item.grade||"").toLowerCase().includes(textQ)||
+      (item.rollingSize||"").toLowerCase().includes(textQ)||
+      (item.materialType||"").toLowerCase().includes(textQ)
+    );
+    var matchLen=!lenQ||isNaN(lenVal)||Math.abs(parseFloat(item.length||0)-lenVal)<0.1;
+    var matchLoc=!locQ||(item.storageLocation||"").toLowerCase().includes(locQ)||(item.storageBin||"").toLowerCase().includes(locQ);
+    if(matchText&&matchLen&&matchLoc)results.push(item);
+  });
+  return results;
+}
+
+function stockSearchHTML(){
+  var totalStock=Object.keys(stockData).length;
+  var results=getStockSearchResults();
+  var hasFilter=stockSearchText.trim()||stockSearchLength.trim()||stockSearchLocation.trim();
+
+  var filtersHTML=
+    '<div style="margin-bottom:12px">'+
+    '<label class="lbl">&#128269; Heat No. / Strand / Batch / Grade / Size</label>'+
+    '<input id="stkTxt" class="search-box" placeholder="e.g. 1264133 or C01 or S355JR" value="'+escHtml(stockSearchText)+'"/>'+
+    '</div>'+
+    '<div class="grid2" style="margin-bottom:12px">'+
+    '<div><label class="lbl">&#128207; Length (m)</label>'+
+    '<input id="stkLen" class="search-box" placeholder="e.g. 12.0" inputmode="decimal" value="'+escHtml(stockSearchLength)+'"/></div>'+
+    '<div><label class="lbl">&#128205; Location / Bin</label>'+
+    '<input id="stkLoc" class="search-box" placeholder="e.g. H030" value="'+escHtml(stockSearchLocation)+'"/></div>'+
+    '</div>';
+
+  var bodyHTML='';
+  if(!totalStock){
+    bodyHTML='<div style="text-align:center;padding:30px;color:#d97706;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:10px">&#9888; No stock uploaded yet. Upload a SAP file from the Stock tab.</div>';
+  } else if(!hasFilter){
+    bodyHTML='<div style="text-align:center;padding:24px;color:#4a6080;background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.1);border-radius:10px">'+
+      '<div style="font-size:32px;margin-bottom:8px">&#128230;</div>'+
+      '<p style="font-weight:700;color:#1e3a8a;margin:0 0 4px">'+totalStock.toLocaleString()+' pieces in stock</p>'+
+      '<p style="font-size:12px;margin:0">Use the filters above to search</p></div>';
+  } else if(results&&results.length===0){
+    bodyHTML='<div style="text-align:center;padding:24px;color:#dc2626;background:rgba(220,38,38,0.04);border:1px solid rgba(220,38,38,0.15);border-radius:10px">&#10007; No pieces found matching your filters.</div>';
+  } else if(results&&results.length>0){
+    var shown=results.slice(0,200);
+    var moreMsg=results.length>200?'<p style="font-size:11px;color:#9ab;text-align:center;padding:8px 0">Showing 200 of '+results.length+' results — refine your search</p>':'';
+    bodyHTML=
+      '<div style="background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.1);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#1e3a8a;font-weight:700">'+
+      '&#128230; '+results.length+' piece(s) found'+(stockLastUpdate?' &nbsp;|&nbsp; <span style="color:#4a6080;font-weight:600">Updated: '+stockLastUpdate+'</span>':'')+
+      '</div>'+
+      '<div style="overflow-x:auto">'+
+      '<table>'+
+      '<thead><tr>'+
+      '<th>Batch No.</th><th>Heat No.</th><th>Strand</th><th>Grade</th>'+
+      '<th>Length</th><th>Qty</th><th>Mat. Type</th><th>Rolling Size</th>'+
+      '<th>Location</th><th>Bin</th>'+
+      '</tr></thead><tbody>'+
+      shown.map(function(item){
+        return '<tr>'+
+          '<td style="font-weight:700;color:#1e3a8a">'+(item.batchNo||"--")+'</td>'+
+          '<td>'+(item.heatNo||"--")+'</td>'+
+          '<td>'+(item.strand||"--")+'</td>'+
+          '<td><span style="background:rgba(59,130,246,0.1);color:#2563eb;border-radius:4px;padding:2px 6px;font-weight:700">'+(item.grade||"--")+'</span></td>'+
+          '<td style="font-weight:700">'+(item.length||"--")+'</td>'+
+          '<td>'+(item.availableStock||"--")+'</td>'+
+          '<td>'+(item.materialType||"--")+'</td>'+
+          '<td>'+(item.rollingSize||"--")+'</td>'+
+          '<td style="color:#059669;font-weight:600">'+(item.storageLocation||"--")+'</td>'+
+          '<td>'+(item.storageBin||"--")+'</td>'+
+          '</tr>';
+      }).join('')+
+      '</tbody></table></div>'+moreMsg;
+  }
+
+  return '<div class="card">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+    '<div class="card-title" style="margin:0">&#128269; Stock Search</div>'+
+    (hasFilter?'<button id="btnStkClear" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:6px 14px;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer">&#10005; Clear</button>':'')+'</div>'+
+    filtersHTML+bodyHTML+
+    '</div>';
+}
+
+function escHtml(s){return(s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
 function ss(u){Object.assign(S,u);draw();}
 function draw(){var active=document.activeElement;var aid=active?active.id:null;var adr=active?active.dataset.r:null;var adf=active?active.dataset.f:null;var ac=active&&active.selectionStart!=null?active.selectionStart:null;document.getElementById("app").innerHTML=html();bind();if(aid){var el=document.getElementById(aid);if(el){el.focus();if(ac!=null){try{el.setSelectionRange(ac,ac);}catch(e){}}}}else if(adr!=null&&adf!=null){var inputs=document.querySelectorAll(".ri");for(var i=0;i<inputs.length;i++){if(inputs[i].dataset.r===adr&&inputs[i].dataset.f===adf){inputs[i].focus();if(ac!=null){try{inputs[i].setSelectionRange(ac,ac);}catch(e){}}break;}}}}
 function html(){if(S.logoutMsg)return logoutHTML();if(!S.role)return loginHTML();if(S.role==="worker"&&S.workerStep)return workerIdHTML();if(S.role==="worker"&&S.roWorkerScreen)return roWorkerHTML();if(S.role==="worker")return workerHTML();if(S.role==="supervisor"&&S.supervisorStep)return supervisorIdHTML();if(S.role==="supervisor"&&showMappingScreen)return mappingScreenHTML();if(S.role==="supervisor")return supHTML();if(S.role==="admin"&&showMappingScreen)return mappingScreenHTML();if(S.role==="admin")return adminHTML();return loginHTML();}
@@ -239,13 +335,10 @@ function roWorkerHTML(){
   var myOrders=roOrders.filter(function(o){
     return o.status==="active"&&(o.assignedWorkerId===S.workerId||o.assignedToAll===true);
   });
-
-  // --- شاشة اختيار Order ---
   if(!roActiveOrder){
     var cards=myOrders.length===0?
       '<div style="text-align:center;padding:40px;color:#4a6080"><div style="font-size:48px">&#128196;</div><p style="margin-top:12px">No active rolling orders</p></div>':
       myOrders.map(function(o){
-        // fallback للبيانات القديمة التي تستخدم steps أو lots
       var secs=o.sections||(o.steps?[{sectionSize:o.finishRollingSize||'--',lots:o.steps.map(function(st){return {lotId:st.lotId||st.id||'--',grade:st.grade,length:st.length,requiredPcs:st.requiredPcs,submittedPieces:st.submittedPieces||[],closed:st.closed||false,key:st.key||st.grade+'_'+st.length};}),closed:false}]:[])||[];
         var tp=secs.reduce(function(s,sec){return s+(sec.lots||[]).reduce(function(s2,l){return s2+l.requiredPcs;},0);},0);
         var dp=secs.reduce(function(s,sec){return s+(sec.lots||[]).reduce(function(s2,l){return s2+(l.submittedPieces||[]).length;},0);},0);
@@ -265,13 +358,9 @@ function roWorkerHTML(){
       '<p style="font-size:16px;font-weight:800;color:#1e3a8a;margin:0">&#128293; Rolling Orders</p></div>'+
       cards+'</div>';
   }
-
   var order=roOrders.find(function(o){return o.id===roActiveOrder;});
   if(!order){roActiveOrder=null;return roWorkerHTML();}
-  // fallback للبيانات القديمة
   var sections=order.sections||(order.steps?[{sectionSize:order.finishRollingSize||'--',lots:order.steps.map(function(st){return {lotId:st.lotId||st.id||'--',grade:st.grade,length:st.length,requiredPcs:st.requiredPcs,submittedPieces:st.submittedPieces||[],closed:st.closed||false,key:st.key||st.grade+'_'+st.length};}),closed:false}]:[])||[];
-
-  // --- شاشة إدخال القطعة ---
   if(roActiveStep!==null&&roActiveStep!==undefined){
     var parts=String(roActiveStep).split('_');
     var secIdx=parseInt(parts[0]);var lotIdx=parseInt(parts[1]);
@@ -291,7 +380,6 @@ function roWorkerHTML(){
         '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(p.heatNo||"")+' | Strand: '+(p.strand||"")+' | Qty: '+(p.quantity||"")+'</p></div>'+
         '<p style="margin:0;font-size:11px;color:#4a6080">'+p.time+'</p></div>';
     }).join('');
-    // حساب رقم الـ step الكلي
     var globalStep=0;
     for(var si=0;si<secIdx;si++)globalStep+=(sections[si].lots||[]).length;
     globalStep+=lotIdx+1;
@@ -339,13 +427,9 @@ function roWorkerHTML(){
         '</div>'
       )+'</div>';
   }
-
-  // --- شاشة القائمة المرتبة بالـ Sections ---
   var totalDone=sections.reduce(function(s,sec){return s+(sec.lots||[]).reduce(function(s2,l){return s2+(l.submittedPieces||[]).length;},0);},0);
   var totalReq=sections.reduce(function(s,sec){return s+(sec.lots||[]).reduce(function(s2,l){return s2+l.requiredPcs;},0);},0);
   var pctTotal=totalReq>0?Math.min(Math.round(totalDone/totalReq*100),100):0;
-
-  // إيجاد أول section غير مكتمل
   var currentSecIdx=-1;
   for(var si2=0;si2<sections.length;si2++){
     var sec2=sections[si2];
@@ -353,14 +437,11 @@ function roWorkerHTML(){
     var secDone=(sec2.lots||[]).every(function(l){return (l.submittedPieces||[]).length>=l.requiredPcs;});
     if(!secDone){currentSecIdx=si2;break;}
   }
-
   var sectionsHtml=sections.map(function(sec,si){
     var secDone=(sec.lots||[]).length>0&&(sec.lots||[]).every(function(l){return (l.submittedPieces||[]).length>=l.requiredPcs;});
     var secLocked=si>currentSecIdx&&currentSecIdx>=0&&!secDone;
     var secClosed=sec.closed&&!secDone;
     var isCurrentSec=si===currentSecIdx;
-
-    // إيجاد أول lot غير مكتمل في هذا الـ section
     var currentLotIdx=-1;
     if(isCurrentSec){
       for(var li2=0;li2<(sec.lots||[]).length;li2++){
@@ -368,10 +449,8 @@ function roWorkerHTML(){
         if(!l2.closed&&(l2.submittedPieces||[]).length<l2.requiredPcs){currentLotIdx=li2;break;}
       }
     }
-
     var secBg=secDone?'rgba(16,185,129,0.04)':isCurrentSec?'rgba(59,130,246,0.04)':secClosed?'rgba(245,158,11,0.04)':'#f8fafc';
     var secBorder=secDone?'rgba(16,185,129,0.4)':isCurrentSec?'#3b82f6':secClosed?'rgba(245,158,11,0.4)':'rgba(30,58,138,0.12)';
-
     var lotsHtml=(sec.lots||[]).map(function(lot,li){
       var done=(lot.submittedPieces||[]).length;var req=lot.requiredPcs;
       var lotDone=done>=req||lot.submitted;
@@ -379,11 +458,9 @@ function roWorkerHTML(){
       var lotLocked=!lotDone&&!isCurrentLot&&(!isCurrentSec||li>currentLotIdx);
       var lotClosed=lot.closed&&!lotDone;
       var pct=req>0?Math.min(Math.round(done/req*100),100):0;
-
       var numBg=lotDone?'#10b981':isCurrentLot?'#3b82f6':lotClosed?'#d97706':'rgba(30,58,138,0.12)';
       var numColor=lotDone||isCurrentLot||lotClosed?'#fff':'#9ab';
       var numIcon=lotDone?'&#10003;':lotClosed?'&#9208;':lotLocked?'&#128274;':(li+1);
-
       return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:'+(lotDone?'rgba(16,185,129,0.04)':isCurrentLot?'rgba(59,130,246,0.06)':'#fff')+';border:1px solid '+(lotDone?'rgba(16,185,129,0.25)':isCurrentLot?'rgba(59,130,246,0.4)':'rgba(30,58,138,0.08)')+';border-radius:10px;margin-bottom:6px;opacity:'+(lotLocked&&!lotClosed?'0.4':'1')+'">'+
         '<div style="width:28px;height:28px;border-radius:50%;background:'+numBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
         '<span style="font-size:11px;font-weight:800;color:'+numColor+'">'+numIcon+'</span></div>'+
@@ -400,7 +477,6 @@ function roWorkerHTML(){
         (isCurrentLot&&!secLocked?'<div style="margin-top:6px"><button data-ro-go-step="'+si+'_'+li+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">'+(done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
         '</div></div>';
     }).join('');
-
     return '<div style="background:'+secBg+';border:2px solid '+secBorder+';border-radius:14px;padding:14px;margin-bottom:12px;opacity:'+(secLocked?'0.35':'1')+'">'+
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'+
       '<div style="flex:1">'+
@@ -414,7 +490,6 @@ function roWorkerHTML(){
       '</div>'+
       lotsHtml+'</div>';
   }).join('');
-
   return topbarW()+'<div class="wrap">'+
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
     '<button id="btnRoBackOrder" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:8px 14px;color:#1e3a8a;font-weight:600;font-size:13px;cursor:pointer">&#8592; Orders</button>'+
@@ -433,7 +508,6 @@ function roSupHTML(){
   if(roPendingData)return roConfirmHTML();
   var dw=S.dynamicWorkers||WORKERS;
   var wo=Object.keys(dw).map(function(id){return '<option value="'+id+'">'+id+' — '+dw[id]+'</option>';}).join('');
-
   var ordersList=roOrders.length===0?
     '<div class="card" style="text-align:center;padding:30px;color:#4a6080"><div style="font-size:48px;margin-bottom:12px">&#128196;</div><p>No rolling orders yet</p></div>':
     roOrders.map(function(o){
@@ -442,7 +516,6 @@ function roSupHTML(){
       var dp=secs.reduce(function(s,sec){return s+(sec.lots||[]).reduce(function(s2,l){return s2+(l.submittedPieces||[]).length;},0);},0);
       var pct=tp>0?Math.round(dp/tp*100):0;
       var isExp=S.roExpandedOrder===o.id;
-
       var det='';
       if(isExp){
         det='<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(30,58,138,0.1)">'+
@@ -462,20 +535,17 @@ function roSupHTML(){
                 var ld=(lot.submittedPieces||[]).length;var lr=lot.requiredPcs;var ok=ld>=lr||lot.submitted;
                 var isEditingLot=S.roEditingLot===o.id+'_'+si+'_'+li;
                 return '<div style="background:'+(ok?'rgba(16,185,129,0.03)':'#fff')+';border:1px solid '+(ok?'rgba(16,185,129,0.2)':'rgba(30,58,138,0.08)')+';border-radius:8px;padding:10px;margin-bottom:6px">'+
-                  // رأس الـ lot
                   '<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(isEditingLot?'10px':'0')+'">'+
                   '<div style="width:22px;height:22px;border-radius:50%;background:'+(ok?'#10b981':lot.closed?'#d97706':'rgba(30,58,138,0.12)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
                   '<span style="font-size:10px;font-weight:800;color:'+(ok||lot.closed?'#fff':'#4a6080')+'">'+(ok?'&#10003;':lot.closed?'&#9208;':(li+1))+'</span></div>'+
                   '<div style="flex:1"><p style="font-size:11px;font-weight:700;color:#1e3a8a;margin:0">&#128202; '+lot.lotId+' &nbsp;|&nbsp; '+lot.length+'m &nbsp;|&nbsp; '+lot.grade+' &nbsp;|&nbsp; Pcs: '+lot.requiredPcs+'</p></div>'+
                   '<span class="counter-badge '+(ok?'counter-done':'counter-ok')+'" style="font-size:10px">'+ld+'/'+lr+'</span>'+
-                  // أزرار التحكم
                   '<div style="display:flex;gap:3px;flex-shrink:0">'+
                   (li>0?'<button data-lot-up="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:4px;padding:2px 6px;color:#1e3a8a;font-size:10px;cursor:pointer">&#9650;</button>':'')+
                   (li<(sec.lots||[]).length-1?'<button data-lot-down="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:4px;padding:2px 6px;color:#1e3a8a;font-size:10px;cursor:pointer">&#9660;</button>':'')+
                   (!ok?'<button data-lot-edit="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:4px;padding:2px 6px;color:#2563eb;font-size:10px;cursor:pointer">&#9998;</button>':'')+
                   (!ok?'<button data-lot-del="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#128465;</button>':'')+
                   '</div></div>'+
-                  // نموذج التعديل
                   (isEditingLot?
                     '<div style="background:rgba(59,130,246,0.04);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px;margin-top:6px">'+
                     '<div style="margin-bottom:6px"><label style="font-size:10px;color:#4a6080;font-weight:600;display:block">Lot ID</label>'+
@@ -489,7 +559,6 @@ function roSupHTML(){
                     '<button data-lot-save="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="flex:2;background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:6px;padding:6px;color:#fff;font-weight:700;font-size:11px;cursor:pointer">&#10003; Save</button>'+
                     '<button data-lot-cancel style="flex:1;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:6px;padding:6px;color:#1e3a8a;font-size:11px;cursor:pointer">Cancel</button>'+
                     '</div></div>':'')+ 
-                  // القطع المدخلة
                   ((lot.submittedPieces||[]).length>0?
                     '<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(30,58,138,0.06)">'+
                     lot.submittedPieces.map(function(p,pi){
@@ -504,7 +573,6 @@ function roSupHTML(){
           '<button data-ro-delete="'+o.id+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer;margin-top:4px">&#128465; Delete Order</button>'+
           '</div>';
       }
-
       return '<div class="card" style="margin-bottom:12px">'+
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'+
         '<div><p style="font-weight:800;color:#1e3a8a;font-size:14px;margin:0">&#128293; Rolling Instruction</p>'+
@@ -516,7 +584,6 @@ function roSupHTML(){
         '<button data-ro-expand="'+o.id+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:8px;padding:6px 12px;color:#1e3a8a;font-weight:700;font-size:12px;cursor:pointer">'+(isExp?'&#9650; Hide':'&#9660; Details')+'</button>'+
         '</div></div>'+det+'</div>';
     }).join('');
-
   return '<div class="card"><div class="card-title">&#128293; Create Rolling Instruction</div>'+
     '<div style="margin-bottom:14px"><label class="lbl">Assign to Worker</label>'+
     '<select id="roWorkerAssign" style="background:#fff"><option value="all">All Workers</option>'+wo+'</select></div>'+
@@ -529,7 +596,7 @@ function supTabs(){return '<div style="display:flex;gap:6px;margin-bottom:18px;f
 function supHTML(){
   var tabs=supTabs();
   if(S.supTab==="rolling")return topbarS()+'<div class="wrap">'+tabs+roSupHTML()+'</div>';
-  if(S.supTab==="search"){var q=searchQuery.trim().toLowerCase();var res=[];if(q.length>2){S.sessions.forEach(function(s){(s.rows||[]).forEach(function(r,ri){if((r.batchNo||"").toLowerCase().includes(q)||(r.heatNo||"").toLowerCase().includes(q)||(r.strand||"").toLowerCase().includes(q)){res.push({session:s,row:r,rowIndex:ri});}});});}return topbarS()+'<div class="wrap">'+tabs+'<div class="card"><div class="card-title">&#128269; Search & Fix</div><input class="search-box" id="searchInput" placeholder="&#128269; Batch No., Heat No., Strand..." value="'+searchQuery+'"/>'+(q.length>2&&res.length===0?'<p style="text-align:center;padding:20px;color:#4a6080">No results for "'+searchQuery+'"</p>':res.length>0?'<div style="margin-top:12px">'+res.map(function(x){var s=x.session;var r=x.row;return '<div class="search-result"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div><p style="font-size:13px;font-weight:800;color:#1e3a8a;margin:0">Batch: <span style="color:#3b82f6">'+r.batchNo+'</span></p><p style="font-size:11px;color:#4a6080;margin:3px 0">Heat: '+r.heatNo+' | Strand: '+r.strand+'</p><p style="font-size:11px;color:#4a6080;margin:0">&#128119; '+(s.workerName||"--")+' | &#128197; '+(s.header&&s.header.date?s.header.date:"")+'</p></div><button style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:8px 14px;color:#dc2626;font-weight:700;font-size:12px;cursor:pointer" data-removebatch="'+r.batchNo+'" data-sessionid="'+s.id+'">&#128465; Remove</button></div></div>';}).join('')+'</div>':q.length>0?'<p style="font-size:12px;color:#9ab;margin-top:8px;text-align:center">Type at least 3 characters...</p>':'')+'</div></div>';}
+  if(S.supTab==="search")return topbarS()+'<div class="wrap">'+tabs+stockSearchHTML()+'</div>';
   if(S.supTab==="stock"){var sc=Object.keys(stockData).length;var re=Object.entries(reservedBatches);return topbarS()+'<div class="wrap">'+tabs+'<div class="card"><div class="card-title">&#128196; Stock</div><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:rgba(30,58,138,0.04);border:1px solid rgba(30,58,138,0.12);border-radius:10px;padding:14px;margin-bottom:14px"><div>'+(sc>0?'<p style="font-size:13px;font-weight:700;color:#059669;margin:0">&#9989; '+sc+' pieces | '+stockLastUpdate+'</p>':'<p style="font-size:13px;font-weight:700;color:#d97706;margin:0">&#9888; No stock uploaded</p>')+'</div><div style="display:flex;gap:8px;flex-wrap:wrap"><label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:inline-block">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label>'+(sc>0?'<button id="btnClearStock" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:10px 16px;color:#dc2626;font-weight:700;font-size:13px;cursor:pointer">&#128465; Clear</button>':'')+'<button id="btnResetMapping" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:10px 16px;color:#d97706;font-weight:700;font-size:13px;cursor:pointer">&#128257; Reset Mapping</button></div></div><div class="card-title">&#128275; List Mode</div><div style="display:flex;gap:10px;margin-bottom:12px"><button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button><button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button></div>'+(re.length>0?'<div class="card-title" style="margin-top:8px">&#128274; Reservations ('+re.length+')</div>'+re.map(function(e){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(139,92,246,0.1)"><p style="font-size:12px;color:#7c3aed;margin:0;font-weight:600">&#128274; <strong>'+e[0]+'</strong> — '+e[1].workerName+'</p><button style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:6px;padding:4px 12px;color:#059669;font-size:11px;font-weight:700;cursor:pointer" data-release="'+e[0]+'">&#128275; Release</button></div>';}).join(''):'')+'</div></div>';}
   var tp=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);
   var stats='<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap"><div class="sc"><div style="font-size:22px">&#128203;</div><div style="font-size:22px;font-weight:800;color:#1e3a8a">'+S.sessions.length+'</div><div style="font-size:11px;color:#4a6080">Requests</div></div><div class="sc"><div style="font-size:22px">&#128296;</div><div style="font-size:22px;font-weight:800;color:#1e3a8a">'+tp+'</div><div style="font-size:11px;color:#4a6080">Pieces</div></div></div>';
@@ -578,9 +645,11 @@ if(tab==="workers"){var dw=S.dynamicWorkers||WORKERS;var wr=Object.keys(dw).sort
 if(tab==="supervisors"){var sr=Object.keys(dynamicSupervisors).sort().map(function(id){return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px"><span style="background:#2563eb;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;min-width:44px;text-align:center">'+id+'</span><span style="flex:1;color:#1e3a8a;font-weight:600">'+dynamicSupervisors[id]+'</span><button data-del-sup="'+id+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">&#10005;</button></div>';}).join('');body='<div class="card"><div class="card-title">Supervisors</div><div style="display:flex;gap:8px;margin-bottom:8px"><input id="newSid" placeholder="ID" style="width:80px;text-align:center;font-weight:700"/><input id="newSname" placeholder="Name" style="flex:1"/></div><button class="bp" id="btnAddSup" style="width:100%;padding:12px;margin-bottom:14px">+ Add Supervisor</button><div style="max-height:400px;overflow-y:auto">'+sr+'</div></div>';}
 if(tab==="settings"){body='<div class="card"><div class="card-title">Passwords</div>'+['Worker','Supervisor','Admin'].map(function(r){return '<div style="margin-bottom:12px"><label class="lbl">'+r+' Password</label><input id="pw'+r+'" placeholder="New password" type="password" style="font-size:14px;padding:12px"/><button class="bp" id="btnSavePw'+r+'" style="width:100%;padding:12px;margin-top:8px">Save</button></div>';}).join('')+'</div>';}
 if(tab==="rolling"){body=roSupHTML();}
-if(tab==="requests"||tab==="stock"||tab==="searchfix"){S.supTab=tab==="searchfix"?"search":tab;body=supBody();}
+if(tab==="searchfix"){body=stockSearchHTML();}
+if(tab==="requests"||tab==="stock"){S.supTab=tab;body=supBody();}
 return topbarS()+'<div class="wrap"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div><p style="font-size:18px;font-weight:800;color:#1e3a8a;margin:0">Admin Panel</p></div><div style="display:flex;gap:8px"><button id="btnRefresh" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.2);border-radius:8px;padding:6px 12px;color:#1e3a8a;font-size:12px;cursor:pointer">&#128260; Refresh</button><button class="bs" id="btnOut" style="padding:8px 14px;font-size:12px">Sign Out</button></div></div>'+tabs+body+'</div>';}
-function supBody(){var tab=S.supTab||"requests";if(tab==="search"){var sq=searchQuery||"";var res=[];if(sq.length>=2){(S.sessions||[]).forEach(function(s){(s.rows||[]).forEach(function(r,ri){if((r.batchNo&&r.batchNo.toLowerCase().includes(sq.toLowerCase()))||(r.heatNo&&r.heatNo.toLowerCase().includes(sq.toLowerCase()))||(r.strand&&r.strand.toLowerCase().includes(sq.toLowerCase()))){res.push({session:s,row:r,rowIdx:ri});}});});}return '<div class="card"><div class="card-title">Search & Fix</div><input id="searchInput" placeholder="Batch No., Heat No., Strand..." value="'+sq+'"/><div style="margin-top:14px">'+(sq.length<2?'<p style="color:#4a6080;font-size:13px;text-align:center">Enter at least 2 characters</p>':res.length?res.map(function(item){return '<div style="background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><div><p style="margin:0;font-weight:700;color:#1e3a8a;font-size:13px">Batch: '+(item.row.batchNo||"")+'</p><p style="margin:2px 0 0;font-size:11px;color:#4a6080">Heat: '+(item.row.heatNo||"")+' | Strand: '+(item.row.strand||"")+'</p></div><button data-dc="'+item.session.id+'" data-ridx="'+item.rowIdx+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Remove</button></div></div>';}).join(''):'<p style="color:#4a6080;font-size:13px;text-align:center">No results</p>')+'</div></div>';}if(tab==="stock"){var sc2=Object.keys(stockData).length;var re2=Object.entries(reservedBatches||{});return '<div class="card"><div class="card-title">&#128230; Upload SAP Stock File</div><label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:block;text-align:center;margin-bottom:8px">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label><button class="bs" id="btnClearStock" style="width:100%;padding:10px;margin-top:4px;background:rgba(220,38,38,0.08);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Clear Stock</button><button class="bs" id="btnResetMapping" style="width:100%;padding:10px;margin-top:8px;background:rgba(245,158,11,0.08);color:#d97706;border:1px solid rgba(245,158,11,0.3)">&#128257; Reset Column Mapping</button></div><div class="card"><div class="card-title">&#9881; List Mode</div><div style="display:flex;gap:10px;margin-bottom:12px"><button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button><button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button></div></div>'+(re2.length?'<div class="card"><div class="card-title">&#128274; Active Reservations</div>'+re2.map(function(e){return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px"><span style="flex:1;color:#1e3a8a;font-weight:600;font-size:13px">'+e[0]+'<span style="color:#4a6080;font-size:11px;margin-left:8px">Reserved by '+e[1].workerName+'</span></span><button data-release="'+e[0]+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Release</button></div>';}).join('')+'</div>':'');}
+function supBody(){var tab=S.supTab||"requests";
+  if(tab==="stock"){var sc2=Object.keys(stockData).length;var re2=Object.entries(reservedBatches||{});return '<div class="card"><div class="card-title">&#128230; Upload SAP Stock File</div><label style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:10px;padding:10px 20px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;display:block;text-align:center;margin-bottom:8px">&#11014; Upload SAP Excel<input type="file" id="stockFile" accept=".xlsx,.xls" style="display:none"/></label><button class="bs" id="btnClearStock" style="width:100%;padding:10px;margin-top:4px;background:rgba(220,38,38,0.08);color:#dc2626;border:1px solid rgba(220,38,38,0.2)">&#128465; Clear Stock</button><button class="bs" id="btnResetMapping" style="width:100%;padding:10px;margin-top:8px;background:rgba(245,158,11,0.08);color:#d97706;border:1px solid rgba(245,158,11,0.3)">&#128257; Reset Column Mapping</button></div><div class="card"><div class="card-title">&#9881; List Mode</div><div style="display:flex;gap:10px;margin-bottom:12px"><button class="mode-btn mode-open'+(listMode==="open"?" active":"")+'" id="btnModeOpen">&#128275; Open List</button><button class="mode-btn mode-closed'+(listMode==="closed"?" active":"")+'" id="btnModeClosed">&#128274; Closed List</button></div></div>'+(re2.length?'<div class="card"><div class="card-title">&#128274; Active Reservations</div>'+re2.map(function(e){return '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:8px;border:1px solid rgba(30,58,138,0.12);margin-bottom:8px"><span style="flex:1;color:#1e3a8a;font-weight:600;font-size:13px">'+e[0]+'<span style="color:#4a6080;font-size:11px;margin-left:8px">Reserved by '+e[1].workerName+'</span></span><button data-release="'+e[0]+'" style="background:rgba(220,38,38,0.1);color:#dc2626;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700">Release</button></div>';}).join('')+'</div>':'');}
   if(tab==="requests"){var tp2=S.sessions.reduce(function(a,s){return a+(s.rows?s.rows.length:0);},0);if(S.loading)return '<div class="card" style="text-align:center;padding:40px"><p style="color:#4a6080">Loading...</p></div>';if(!S.sessions||!S.sessions.length)return '<div class="card" style="text-align:center;padding:40px"><div style="font-size:48px;margin-bottom:12px">&#128237;</div><p style="color:#4a6080;font-size:15px">No requests yet</p></div>';return S.sessions.map(function(s){var rows=(s.rows||[]).map(function(r,i){return '<tr><td>'+(i+1)+'</td><td>'+(r.heatNo||'')+'</td><td>'+(r.strand||'')+'</td><td>'+(r.batchNo||'')+'</td><td>'+(r.grade||'')+'</td><td>'+(r.length||'')+'</td><td>'+(r.quantity||'')+'</td><td>'+(r.locationFrom||'')+'</td><td>'+(r.locationTo||'')+'</td><td>'+(r.remarks||'')+'</td></tr>';}).join('');return '<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px"><div><p style="font-weight:800;color:#1e3a8a;font-size:15px;margin:0">'+(s.workerName||'--')+'</p><p style="font-size:12px;color:#4a6080;margin:4px 0 0">'+(s.header&&s.header.date?s.header.date:'')+' | Start: '+(s.header&&s.header.startTime?s.header.startTime:'')+(s.timeTaken?' | '+s.timeTaken:'')+'</p></div><div style="display:flex;gap:8px"><button data-ex="'+s.id+'" class="bx">&#11015; Excel</button><button data-da="'+s.id+'" class="bd">&#128465;</button></div></div><div style="overflow-x:auto;margin-top:10px"><table><thead><tr><th>#</th><th>Heat No.</th><th>Strand</th><th>Batch No.</th><th>Grade</th><th>Length</th><th>Qty</th><th>From</th><th>To</th><th>Remarks</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';}).join('');}
   return '';}
 function bind(){
@@ -592,7 +661,7 @@ function bind(){
   var bsid=document.getElementById("btnSid");
   if(bsid) bsid.onclick=async function(){var sid=document.getElementById("sid").value.trim().toUpperCase();await loadDynamicSupervisors();var sname=dynamicSupervisors[sid];if(!sname){ss({supervisorIdErr:"ID not found."});return;}await loadDynamicWorkers();ss({supervisorStep:false,supervisorId:sid,supervisorName:sname,supervisorIdErr:"",submitted:false,supTab:"requests"});load();loadStockFromDB();listenReservations();listenRollingOrders();registerPresence(sname+' ('+sid+')','Supervisor');};
   var btnRefresh=document.getElementById("btnRefresh");if(btnRefresh) btnRefresh.onclick=async function(){await loadRemarks();await loadStockFromDB();if(S.role==="supervisor"||S.role==="admin"){load();}draw();};
-  var bo=document.getElementById("btnOut");if(bo) bo.onclick=async function(){await removePresence();if(unsubPresence){unsubPresence();unsubPresence=null;}if(unsub)unsub();if(unsubReservations)unsubReservations();if(unsubRO)unsubRO();showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];columnMapping=null;roPendingData=null;roAiLoading=false;roActiveOrder=null;roActiveStep=null;ss({role:null,uname:"",submitted:false,sessions:[],workerStep:false,workerId:"",workerName:"",supervisorStep:false,supervisorId:"",supervisorName:""});};
+  var bo=document.getElementById("btnOut");if(bo) bo.onclick=async function(){await removePresence();if(unsubPresence){unsubPresence();unsubPresence=null;}if(unsub)unsub();if(unsubReservations)unsubReservations();if(unsubRO)unsubRO();showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];columnMapping=null;roPendingData=null;roAiLoading=false;roActiveOrder=null;roActiveStep=null;stockSearchText="";stockSearchLength="";stockSearchLocation="";ss({role:null,uname:"",submitted:false,sessions:[],workerStep:false,workerId:"",workerName:"",supervisorStep:false,supervisorId:"",supervisorName:""});};
   var blogout=document.getElementById("btnLogout");if(blogout) blogout.onclick=async function(){await removePresence();await releaseMyReservations();if(unsub)unsub();if(unsubReservations)unsubReservations();if(unsubRO)unsubRO();roActiveOrder=null;roActiveStep=null;ss({role:null,uname:"",submitted:false,workerStep:false,workerId:"",workerName:"",rows:[er()],logoutMsg:true,roWorkerScreen:false});setTimeout(function(){ss({logoutMsg:false});},4000);};
   var bback=document.getElementById("btnBackLogin");if(bback) bback.onclick=function(){ss({logoutMsg:false});};
   var bn=document.getElementById("btnNew");if(bn) bn.onclick=async function(){await releaseMyReservations();startTime=null;await loadAllBatchNos();await loadStockFromDB();ss({submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:"",endTime:""}});};
@@ -602,28 +671,34 @@ function bind(){
   var tabReq=document.getElementById("tabReq");if(tabReq) tabReq.onclick=function(){ss({supTab:"requests"});};
   var tabRO=document.getElementById("tabRO");if(tabRO) tabRO.onclick=function(){ss({supTab:"rolling"});};
   var tabStock=document.getElementById("tabStock");if(tabStock) tabStock.onclick=function(){ss({supTab:"stock"});};
-  var tabSearch=document.getElementById("tabSearch");if(tabSearch) tabSearch.onclick=function(){searchQuery="";ss({supTab:"search"});};
-  var si=document.getElementById("searchInput");if(si){si.addEventListener("input",function(e){searchQuery=e.target.value;document.getElementById("app").innerHTML=html();bind();var ns=document.getElementById("searchInput");if(ns){ns.focus();try{ns.setSelectionRange(searchQuery.length,searchQuery.length);}catch(ex){}}});}
+  var tabSearch=document.getElementById("tabSearch");if(tabSearch) tabSearch.onclick=function(){stockSearchText="";stockSearchLength="";stockSearchLocation="";ss({supTab:"search"});};
+
+  // Stock search inputs — live filtering
+  var stkTxt=document.getElementById("stkTxt");
+  if(stkTxt){stkTxt.addEventListener("input",function(e){stockSearchText=e.target.value;var el=document.getElementById("app");el.innerHTML=html();bind();var ns=document.getElementById("stkTxt");if(ns){ns.focus();try{ns.setSelectionRange(stockSearchText.length,stockSearchText.length);}catch(ex){}}});}
+  var stkLen=document.getElementById("stkLen");
+  if(stkLen){stkLen.addEventListener("input",function(e){stockSearchLength=e.target.value;var el=document.getElementById("app");el.innerHTML=html();bind();var ns=document.getElementById("stkLen");if(ns)ns.focus();});}
+  var stkLoc=document.getElementById("stkLoc");
+  if(stkLoc){stkLoc.addEventListener("input",function(e){stockSearchLocation=e.target.value;var el=document.getElementById("app");el.innerHTML=html();bind();var ns=document.getElementById("stkLoc");if(ns){ns.focus();try{ns.setSelectionRange(stockSearchLocation.length,stockSearchLocation.length);}catch(ex){}}});}
+  var btnStkClear=document.getElementById("btnStkClear");
+  if(btnStkClear){btnStkClear.onclick=function(){stockSearchText="";stockSearchLength="";stockSearchLocation="";draw();};}
+
   var btnGoRO=document.getElementById("btnGoRO");if(btnGoRO) btnGoRO.onclick=function(){roActiveOrder=null;roActiveLot=null;roActiveLength=null;ss({roWorkerScreen:true});};
   var btnRoBack=document.getElementById("btnRoBack");if(btnRoBack) btnRoBack.onclick=function(){ss({roWorkerScreen:false});};
   var btnRoBackOrder=document.getElementById("btnRoBackOrder");if(btnRoBackOrder) btnRoBackOrder.onclick=function(){roActiveOrder=null;roActiveStep=null;draw();};
-  var btnRoBackLot=document.getElementById("btnRoBackLot");if(btnRoBackLot) btnRoBackLot.onclick=function(){roActiveLot=null;roActiveLength=null;draw();};
   var btnRoBackLength=document.getElementById("btnRoBackLength");if(btnRoBackLength) btnRoBackLength.onclick=function(){roActiveStep=null;S.roPieceStatus={};S.roHeatNo='';S.roStrand='';S.roBatchNo='';draw();};
-  // Step buttons
   document.querySelectorAll("[data-ro-go-step]").forEach(function(b){
     b.onclick=function(){
-      roActiveStep=b.dataset.roGoStep; // format: "secIdx_lotIdx"
+      roActiveStep=b.dataset.roGoStep;
       S.roPieceStatus={};S.roHeatNo='';S.roStrand='';S.roBatchNo='';S.roQty='';S.roLocFrom='';S.roRemarks='';
       draw();
     };
   });
-  // Section controls
   document.querySelectorAll("[data-ro-sec-up]").forEach(function(b){b.onclick=async function(){await moveSectionUp(b.dataset.roSecUp,parseInt(b.dataset.roSi));};});
   document.querySelectorAll("[data-ro-sec-down]").forEach(function(b){b.onclick=async function(){await moveSectionDown(b.dataset.roSecDown,parseInt(b.dataset.roSi));};});
   document.querySelectorAll("[data-ro-sec-open]").forEach(function(b){b.onclick=async function(){await toggleSectionClosed(b.dataset.roSecOpen,parseInt(b.dataset.roSi),true);};});
   document.querySelectorAll("[data-ro-sec-close]").forEach(function(b){b.onclick=async function(){await toggleSectionClosed(b.dataset.roSecClose,parseInt(b.dataset.roSi),false);};});
   document.querySelectorAll("[data-ro-sec-del]").forEach(function(b){b.onclick=async function(){if(!confirm("Delete this section?"))return;await deleteSectionFromOrder(b.dataset.roSecDel,parseInt(b.dataset.roSi));};});
-  // Lot controls
   document.querySelectorAll("[data-lot-up]").forEach(function(b){b.onclick=async function(){await moveLotUp(b.dataset.lotUp,parseInt(b.dataset.roSi),parseInt(b.dataset.roLi));};});
   document.querySelectorAll("[data-lot-down]").forEach(function(b){b.onclick=async function(){await moveLotDown(b.dataset.lotDown,parseInt(b.dataset.roSi),parseInt(b.dataset.roLi));};});
   document.querySelectorAll("[data-lot-del]").forEach(function(b){b.onclick=async function(){if(!confirm("Delete this lot?"))return;await deleteLotFromOrder(b.dataset.lotDel,parseInt(b.dataset.roSi),parseInt(b.dataset.roLi));};});
@@ -640,8 +715,6 @@ function bind(){
     ss({roEditingLot:null});
   };});
   document.querySelectorAll("[data-ro-order]").forEach(function(b){b.onclick=function(){roActiveOrder=b.dataset.roOrder;roActiveLot=null;roActiveLength=null;draw();};});
-  document.querySelectorAll("[data-ro-lot]").forEach(function(b){if(!b.dataset.roOrder)b.onclick=function(){roActiveLot=b.dataset.roLot;roActiveLength=null;draw();};});
-  document.querySelectorAll("[data-ro-length]").forEach(function(b){b.onclick=function(){roActiveLength=b.dataset.roLength;draw();};});
   var roH=document.getElementById("ro_heatNo");var roSt=document.getElementById("ro_strand");
   function updRoBatch(){
     var h=(roH?roH.value:"").trim();
@@ -650,7 +723,6 @@ function bind(){
     var bEl=document.getElementById("ro_batchNo");
     if(bEl)bEl.value=batch;
     S.roHeatNo=h;S.roStrand=st;S.roBatchNo=batch;
-    // ابحث في stock عند اكتمال الـ batch
     if(batch.length>5){
       var order=roOrders.find(function(o){return o.id===roActiveOrder;});
       var li=null;
@@ -693,9 +765,7 @@ function bind(){
     var remarks=(document.getElementById("ro_remarks")||{}).value||"";
     if(!hn.trim()){alert("Please enter Heat No.");return;}
     var status=S.roPieceStatus||{};
-    // رفض عدم المطابقة تماماً
     if(status.mismatch){alert("\u274C Rejected — Piece does not match:\nRequired: Grade "+status.reqGrade+" | Length "+status.reqLength+"m\nFound: Grade "+status.stockGrade+" | Length "+status.stockLength+"m");return;}
-    // رفض القطعة غير الموجودة في stock
     if(status.notFound){alert("\u274C Rejected — Batch No. "+hn.trim()+strand.trim()+" not found in stock.");return;}
     var order=roOrders.find(function(o){return o.id===roActiveOrder;});
     if(!order||roActiveStep===null){alert("Error: order not found.");return;}
@@ -704,7 +774,6 @@ function bind(){
     var sec2obj=order.sections[secIdx]||{};
     var lot=(sec2obj.lots||[])[lotIdx];
     if(!lot){alert("Lot not found.");return;}
-    // رفض التكرار — نفس الـ Batch No
     var batchNo=hn.trim()+strand.trim();
     var allSubmitted=(order.sections||[]).reduce(function(arr,sec){
       return arr.concat((sec.lots||[]).reduce(function(arr2,l){
@@ -728,8 +797,6 @@ function bind(){
     await updateRollingOrderPieces(roActiveOrder,secIdx,lotIdx,(lot.submittedPieces||[]).concat([newP]));
     draw();
   };
-
-  // Event delegation للـ rolling order form
   var roCard=document.getElementById("roSectionsContainer");
   if(roCard){
     roCard.addEventListener("click",function(e){
@@ -814,7 +881,6 @@ function bind(){
         timestamp:new Date().toLocaleString("en-GB")
       });
       rs.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});
-      // منع إعادة التسليم - إغلاق الـ lot نهائياً
       await updateRollingOrderPieces(roActiveOrder,secIdx2,lotIdx2,lot2.submittedPieces,true);
       alert("✅ Submitted successfully! Supervisor can see it now.");
       roActiveStep=null;draw();
@@ -827,7 +893,6 @@ function bind(){
       await removePieceFromRO(b.dataset.roRmOrder,parseInt(b.dataset.roRmSi),parseInt(b.dataset.roRmLi),parseInt(b.dataset.roRmPi));
     };
   });
-  document.querySelectorAll("[data-ro-sap]").forEach(function(b){b.onclick=function(){xlExportRO(b.dataset.roSap);};});
   document.querySelectorAll("[data-ro-delete]").forEach(function(b){b.onclick=async function(){if(!confirm("Delete this rolling order permanently?"))return;try{await db.collection("rollingOrders").doc(b.dataset.roDelete).delete();}catch(e){alert("Error: "+e.message);}};});
   var bmo=document.getElementById("btnModeOpen");if(bmo) bmo.onclick=async function(){listMode="open";try{await db.collection("settings").doc("listMode").set({mode:"open"});}catch(e){}draw();};
   var bmc=document.getElementById("btnModeClosed");if(bmc) bmc.onclick=async function(){listMode="closed";try{await db.collection("settings").doc("listMode").set({mode:"closed"});}catch(e){}draw();};
@@ -846,7 +911,6 @@ function bind(){
   document.querySelectorAll("[data-del-sup]").forEach(function(btn){btn.onclick=async function(){var sid3=btn.getAttribute("data-del-sup");if(!confirm("Delete supervisor "+sid3+"?"))return;await loadDynamicSupervisors();delete dynamicSupervisors[sid3];await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});draw();};});
   var pwKeys={Worker:"worker",Supervisor:"supervisor",Admin:"admin"};["Worker","Supervisor","Admin"].forEach(function(r){var btn=document.getElementById("btnSavePw"+r);if(btn) btn.onclick=async function(){var val=document.getElementById("pw"+r).value.trim();if(!val){alert("Cannot be empty.");return;}try{var up={};up[pwKeys[r]]=val;await db.collection("settings").doc("passwords").set(up,{merge:true});if(r==="Worker")CREDS.Work.pw=val;else if(r==="Supervisor")CREDS.Super.pw=val;else if(r==="Admin")CREDS.Admin.pw=val;document.getElementById("pw"+r).value="";alert("Password updated.");}catch(e){alert("Error: "+e.message);}};});
   document.querySelectorAll("[data-release]").forEach(function(b){b.onclick=async function(e){var bt=e.target.dataset.release;if(!confirm("Release reservation for: "+bt+"?"))return;try{await db.collection("reservations").doc(bt).delete();draw();}catch(ex){alert("Error.");}};});
-  document.querySelectorAll("[data-removebatch]").forEach(function(b){b.onclick=async function(e){var btr=e.target.dataset.removebatch;var sid=e.target.dataset.sessionid;if(!confirm("Remove piece "+btr+"?"))return;try{var sess=S.sessions.find(function(s){return s.id===sid;});if(!sess)return;var nr=(sess.rows||[]).filter(function(r){return r.batchNo!==btr;});await db.collection("deliveryNotes").doc(sid).update({rows:nr});allBatchNos.delete(btr);searchQuery="";alert("Removed.");draw();}catch(ex){alert("Error: "+ex.message);}};});
   document.querySelectorAll(".ri").forEach(function(inp){inp.addEventListener("input",function(e){var i=parseInt(e.target.dataset.r);var f=e.target.dataset.f;S.rows[i][f]=e.target.value;if(f==="heatNo"||f==="strand"){var batch=(S.rows[i].heatNo||"")+(S.rows[i].strand||"");S.rows[i].batchNo=batch;S.rows[i].autoFilled=false;S.rows[i].notFound=false;S.rows[i].alreadySubmitted=false;S.rows[i].reserved=false;S.rows[i].reservedBy="";var dupInReq=batch&&S.rows.filter(function(r,x){return x!==i&&((r.heatNo||"")+(r.strand||""))===batch;}).length>0;if(dupInReq){S.rows[i][f]="";S.rows[i].batchNo=(S.rows[i].heatNo||"")+(S.rows[i].strand||"");alert("This piece already exists in this request!");return;}if(batch.length>5){if(allBatchNos.has(batch))S.rows[i].alreadySubmitted=true;if(reservedBatches[batch]&&reservedBatches[batch].workerId!==S.workerId){S.rows[i].reserved=true;S.rows[i].reservedBy=reservedBatches[batch].workerName;}else if(!allBatchNos.has(batch))reserveBatch(batch);if(listMode==="closed"){if(stockData[batch]){var item=stockData[batch];S.rows[i].grade=item.grade||"";S.rows[i].length=String(item.length||"");S.rows[i].materialType=item.materialType||"";S.rows[i].locationFrom=item.storageLocation||"";S.rows[i].rollingSize=item.rollingSize||"";S.rows[i].quantity=String(item.availableStock||"");S.rows[i].autoFilled=true;S.rows[i].notFound=false;}else{S.rows[i].autoFilled=false;S.rows[i].notFound=true;}}}}if(!startTime&&e.target.value.trim()){startTime=new Date();S.hdr.startTime=fmtTime(startTime);}if(f==="heatNo"||f==="strand")draw();});});
   document.querySelectorAll("[data-ri]").forEach(function(b){b.onclick=async function(e){var i=parseInt(e.target.dataset.ri);var batch=S.rows[i].batchNo;if(batch&&myReservations.includes(batch)){try{await db.collection("reservations").doc(batch).delete();}catch(ex){}myReservations=myReservations.filter(function(r){return r!==batch;});}ss({rows:S.rows.filter(function(_,x){return x!==i;})});};});
   document.querySelectorAll("[data-cp]").forEach(function(b){b.onclick=function(e){var i=parseInt(e.target.dataset.cp);var nr=Object.assign({},S.rows[i]);nr.strand="";nr.batchNo="";nr.remarks="";nr.autoFilled=false;nr.notFound=false;nr.alreadySubmitted=false;nr.reserved=false;nr.reservedBy="";ss({rows:S.rows.concat([nr])});};});
