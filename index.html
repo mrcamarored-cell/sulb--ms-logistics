@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.2.1";
+const VERSION="v1.2.3";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -93,8 +93,8 @@ function fmtTime(d){return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"
 function fmtDate(d){return d.toISOString().slice(0,10);}
 function timeDiff(s,e){var diff=Math.floor((e-s)/1000);var h=Math.floor(diff/3600);var m=Math.floor((diff%3600)/60);var sc=diff%60;return(h>0?h+"h ":"")+m+"m "+sc+"s";}
 let allBatchNos=new Set(),startTime=null,stockData={},stockLastUpdate="",listMode="open",reservedBatches={},myReservations=[],searchQuery="";
-// Stock search state
-let stockSearchText="",stockSearchLength="",stockSearchLocation="";
+// Stock search state — one var per field
+let stkHeat="",stkBatch="",stkGrade="",stkLength="",stkLocation="",stkMatType="";
 let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,roExpandedOrder:null,roEditingLot:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
 let unsub=null,unsubReservations=null,unsubPresence=null;
 async function loadAllBatchNos(){try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){}}
@@ -206,45 +206,49 @@ async function removePieceFromRO(orderId,lotId,lengthKey,pieceIdx){try{var order
 
 // ===================== STOCK SEARCH HELPER =====================
 function getStockSearchResults(){
-  var textQ=(stockSearchText||"").trim().toLowerCase();
-  var lenQ=stockSearchLength.trim();
-  var locQ=(stockSearchLocation||"").trim().toLowerCase();
+  var heatQ=stkHeat.trim().toLowerCase();
+  var batchQ=stkBatch.trim().toLowerCase();
+  var gradeQ=stkGrade.trim().toLowerCase();
+  var lenQ=stkLength.trim();
+  var locQ=stkLocation.trim().toLowerCase();
+  var matQ=stkMatType.trim().toLowerCase();
+  var hasFilter=heatQ||batchQ||gradeQ||lenQ||locQ||matQ;
+  if(!hasFilter)return null;
   var lenVal=parseFloat(lenQ);
-  var hasFilter=textQ||lenQ||locQ;
-  if(!hasFilter)return null; // null = no search yet
-  var results=[];
-  Object.keys(stockData).forEach(function(k){
-    var item=stockData[k];
-    var matchText=!textQ||(
-      (item.heatNo||"").toLowerCase().includes(textQ)||
-      (item.strand||"").toLowerCase().includes(textQ)||
-      (item.batchNo||"").toLowerCase().includes(textQ)||
-      (item.grade||"").toLowerCase().includes(textQ)||
-      (item.rollingSize||"").toLowerCase().includes(textQ)||
-      (item.materialType||"").toLowerCase().includes(textQ)
-    );
-    var matchLen=!lenQ||isNaN(lenVal)||Math.abs(parseFloat(item.length||0)-lenVal)<0.1;
-    var matchLoc=!locQ||(item.storageLocation||"").toLowerCase().includes(locQ)||(item.storageBin||"").toLowerCase().includes(locQ);
-    if(matchText&&matchLen&&matchLoc)results.push(item);
+  return Object.values(stockData).filter(function(item){
+    if(heatQ&&!(item.heatNo||"").toLowerCase().includes(heatQ))return false;
+    if(batchQ&&!(item.batchNo||"").toLowerCase().includes(batchQ))return false;
+    if(gradeQ&&!(item.grade||"").toLowerCase().includes(gradeQ))return false;
+    if(lenQ&&!isNaN(lenVal)&&Math.abs(parseFloat(item.length||0)-lenVal)>=0.11)return false;
+    if(locQ&&!(item.storageLocation||"").toLowerCase().includes(locQ)&&!(item.storageBin||"").toLowerCase().includes(locQ))return false;
+    if(matQ&&!(item.materialType||"").toLowerCase().includes(matQ))return false;
+    return true;
   });
-  return results;
 }
 
 function stockSearchHTML(){
   var totalStock=Object.keys(stockData).length;
   var results=getStockSearchResults();
-  var hasFilter=stockSearchText.trim()||stockSearchLength.trim()||stockSearchLocation.trim();
+  var hasFilter=stkHeat.trim()||stkBatch.trim()||stkGrade.trim()||stkLength.trim()||stkLocation.trim()||stkMatType.trim();
 
   var filtersHTML=
-    '<div style="margin-bottom:12px">'+
-    '<label class="lbl">&#128269; Heat No. / Strand / Batch / Grade / Size</label>'+
-    '<input id="stkTxt" class="search-box" placeholder="e.g. 1264133 or C01 or S355JR" value="'+escHtml(stockSearchText)+'"/>'+
+    '<div class="grid2" style="margin-bottom:10px">'+
+    '<div><label class="lbl">&#128293; Heat No.</label>'+
+    '<input id="stkHeat" class="search-box" placeholder="e.g. 1264133" inputmode="numeric" value="'+escHtml(stkHeat)+'"/></div>'+
+    '<div><label class="lbl">&#128203; Batch No.</label>'+
+    '<input id="stkBatch" class="search-box" placeholder="e.g. 1264133C01" value="'+escHtml(stkBatch)+'"/></div>'+
+    '</div>'+
+    '<div class="grid3" style="margin-bottom:12px">'+
+    '<div><label class="lbl">&#127981; Grade</label>'+
+    '<input id="stkGrade" class="search-box" placeholder="e.g. S355JR" value="'+escHtml(stkGrade)+'"/></div>'+
+    '<div><label class="lbl">&#128207; Length (m)</label>'+
+    '<input id="stkLen" class="search-box" placeholder="e.g. 12.0" inputmode="decimal" value="'+escHtml(stkLength)+'"/></div>'+
+    '<div><label class="lbl">&#128230; Material Type</label>'+
+    '<input id="stkMat" class="search-box" placeholder="e.g. BLT" value="'+escHtml(stkMatType)+'"/></div>'+
     '</div>'+
     '<div class="grid2" style="margin-bottom:12px">'+
-    '<div><label class="lbl">&#128207; Length (m)</label>'+
-    '<input id="stkLen" class="search-box" placeholder="e.g. 12.0" inputmode="decimal" value="'+escHtml(stockSearchLength)+'"/></div>'+
     '<div><label class="lbl">&#128205; Location / Bin</label>'+
-    '<input id="stkLoc" class="search-box" placeholder="e.g. H030" value="'+escHtml(stockSearchLocation)+'"/></div>'+
+    '<input id="stkLoc" class="search-box" placeholder="e.g. H030" value="'+escHtml(stkLocation)+'"/></div>'+
     '</div>';
 
   var bodyHTML='';
@@ -661,7 +665,7 @@ function bind(){
   var bsid=document.getElementById("btnSid");
   if(bsid) bsid.onclick=async function(){var sid=document.getElementById("sid").value.trim().toUpperCase();await loadDynamicSupervisors();var sname=dynamicSupervisors[sid];if(!sname){ss({supervisorIdErr:"ID not found."});return;}await loadDynamicWorkers();ss({supervisorStep:false,supervisorId:sid,supervisorName:sname,supervisorIdErr:"",submitted:false,supTab:"requests"});load();loadStockFromDB();listenReservations();listenRollingOrders();registerPresence(sname+' ('+sid+')','Supervisor');};
   var btnRefresh=document.getElementById("btnRefresh");if(btnRefresh) btnRefresh.onclick=async function(){await loadRemarks();await loadStockFromDB();if(S.role==="supervisor"||S.role==="admin"){load();}draw();};
-  var bo=document.getElementById("btnOut");if(bo) bo.onclick=async function(){await removePresence();if(unsubPresence){unsubPresence();unsubPresence=null;}if(unsub)unsub();if(unsubReservations)unsubReservations();if(unsubRO)unsubRO();showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];columnMapping=null;roPendingData=null;roAiLoading=false;roActiveOrder=null;roActiveStep=null;stockSearchText="";stockSearchLength="";stockSearchLocation="";ss({role:null,uname:"",submitted:false,sessions:[],workerStep:false,workerId:"",workerName:"",supervisorStep:false,supervisorId:"",supervisorName:""});};
+  var bo=document.getElementById("btnOut");if(bo) bo.onclick=async function(){await removePresence();if(unsubPresence){unsubPresence();unsubPresence=null;}if(unsub)unsub();if(unsubReservations)unsubReservations();if(unsubRO)unsubRO();showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];columnMapping=null;roPendingData=null;roAiLoading=false;roActiveOrder=null;roActiveStep=null;stockSearchText="";stockSearchLength="";stockSearchLocation="";stkHeat="";stkBatch="";stkGrade="";stkLength="";stkLocation="";stkMatType="";ss({role:null,uname:"",submitted:false,sessions:[],workerStep:false,workerId:"",workerName:"",supervisorStep:false,supervisorId:"",supervisorName:""});};
   var blogout=document.getElementById("btnLogout");if(blogout) blogout.onclick=async function(){await removePresence();await releaseMyReservations();if(unsub)unsub();if(unsubReservations)unsubReservations();if(unsubRO)unsubRO();roActiveOrder=null;roActiveStep=null;ss({role:null,uname:"",submitted:false,workerStep:false,workerId:"",workerName:"",rows:[er()],logoutMsg:true,roWorkerScreen:false});setTimeout(function(){ss({logoutMsg:false});},4000);};
   var bback=document.getElementById("btnBackLogin");if(bback) bback.onclick=function(){ss({logoutMsg:false});};
   var bn=document.getElementById("btnNew");if(bn) bn.onclick=async function(){await releaseMyReservations();startTime=null;await loadAllBatchNos();await loadStockFromDB();ss({submitted:false,rows:[er()],hdr:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:"",endTime:""}});};
@@ -671,17 +675,27 @@ function bind(){
   var tabReq=document.getElementById("tabReq");if(tabReq) tabReq.onclick=function(){ss({supTab:"requests"});};
   var tabRO=document.getElementById("tabRO");if(tabRO) tabRO.onclick=function(){ss({supTab:"rolling"});};
   var tabStock=document.getElementById("tabStock");if(tabStock) tabStock.onclick=function(){ss({supTab:"stock"});};
-  var tabSearch=document.getElementById("tabSearch");if(tabSearch) tabSearch.onclick=function(){stockSearchText="";stockSearchLength="";stockSearchLocation="";ss({supTab:"search"});};
+  var tabSearch=document.getElementById("tabSearch");if(tabSearch) tabSearch.onclick=function(){stkHeat="";stkBatch="";stkGrade="";stkLength="";stkLocation="";stkMatType="";ss({supTab:"search"});};
 
-  // Stock search inputs — live filtering
-  var stkTxt=document.getElementById("stkTxt");
-  if(stkTxt){stkTxt.addEventListener("input",function(e){stockSearchText=e.target.value;var el=document.getElementById("app");el.innerHTML=html();bind();var ns=document.getElementById("stkTxt");if(ns){ns.focus();try{ns.setSelectionRange(stockSearchText.length,stockSearchText.length);}catch(ex){}}});}
-  var stkLen=document.getElementById("stkLen");
-  if(stkLen){stkLen.addEventListener("input",function(e){stockSearchLength=e.target.value;var el=document.getElementById("app");el.innerHTML=html();bind();var ns=document.getElementById("stkLen");if(ns)ns.focus();});}
-  var stkLoc=document.getElementById("stkLoc");
-  if(stkLoc){stkLoc.addEventListener("input",function(e){stockSearchLocation=e.target.value;var el=document.getElementById("app");el.innerHTML=html();bind();var ns=document.getElementById("stkLoc");if(ns){ns.focus();try{ns.setSelectionRange(stockSearchLocation.length,stockSearchLocation.length);}catch(ex){}}});}
+  // Stock search inputs — live per-field filtering
+  function bindStkInput(id,setter,getterFn){
+    var el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener("input",function(e){
+      setter(e.target.value);
+      var app=document.getElementById("app");app.innerHTML=html();bind();
+      var ns=document.getElementById(id);
+      if(ns){ns.focus();try{ns.setSelectionRange(getterFn().length,getterFn().length);}catch(ex){}}
+    });
+  }
+  bindStkInput("stkHeat",function(v){stkHeat=v;},function(){return stkHeat;});
+  bindStkInput("stkBatch",function(v){stkBatch=v;},function(){return stkBatch;});
+  bindStkInput("stkGrade",function(v){stkGrade=v;},function(){return stkGrade;});
+  bindStkInput("stkLen",function(v){stkLength=v;},function(){return stkLength;});
+  bindStkInput("stkMat",function(v){stkMatType=v;},function(){return stkMatType;});
+  bindStkInput("stkLoc",function(v){stkLocation=v;},function(){return stkLocation;});
   var btnStkClear=document.getElementById("btnStkClear");
-  if(btnStkClear){btnStkClear.onclick=function(){stockSearchText="";stockSearchLength="";stockSearchLocation="";draw();};}
+  if(btnStkClear){btnStkClear.onclick=function(){stkHeat="";stkBatch="";stkGrade="";stkLength="";stkLocation="";stkMatType="";draw();};}
 
   var btnGoRO=document.getElementById("btnGoRO");if(btnGoRO) btnGoRO.onclick=function(){roActiveOrder=null;roActiveLot=null;roActiveLength=null;ss({roWorkerScreen:true});};
   var btnRoBack=document.getElementById("btnRoBack");if(btnRoBack) btnRoBack.onclick=function(){ss({roWorkerScreen:false});};
