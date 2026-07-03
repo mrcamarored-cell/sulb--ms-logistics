@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.3.7";
+const VERSION="v1.3.8";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -624,54 +624,41 @@ function roWorkerHTML(){
     if(!secDone){currentSecIdx=si2;break;}
   }
   var sectionsHtml=sections.map(function(sec,si){
-    var secDone=(sec.lots||[]).length>0&&(sec.lots||[]).every(function(l){return (l.submittedPieces||[]).length>=l.requiredPcs;});
-    var secLocked=si>currentSecIdx&&currentSecIdx>=0&&!secDone;
-    var secClosed=sec.closed&&!secDone;
-    var isCurrentSec=si===currentSecIdx;
-    var currentLotIdx=-1;
-    if(isCurrentSec){
-      for(var li2=0;li2<(sec.lots||[]).length;li2++){
-        var l2=sec.lots[li2];
-        if(!l2.closed&&(l2.submittedPieces||[]).length<l2.requiredPcs){currentLotIdx=li2;break;}
-      }
-    }
-    var secBg=secDone?'rgba(16,185,129,0.04)':isCurrentSec?'rgba(59,130,246,0.04)':secClosed?'rgba(245,158,11,0.04)':'#f8fafc';
-    var secBorder=secDone?'rgba(16,185,129,0.4)':isCurrentSec?'#3b82f6':secClosed?'rgba(245,158,11,0.4)':'rgba(30,58,138,0.12)';
+    var secDone=(sec.lots||[]).length>0&&(sec.lots||[]).every(function(l){return (l.submittedPieces||[]).length>=l.requiredPcs||l.submitted;});
+    var secClosed=sec.closed;
+    var secBg=secDone?'rgba(16,185,129,0.04)':secClosed?'rgba(245,158,11,0.04)':'#f8fafc';
+    var secBorder=secDone?'rgba(16,185,129,0.4)':secClosed?'rgba(245,158,11,0.4)':'rgba(30,58,138,0.12)';
     var lotsHtml=(sec.lots||[]).map(function(lot,li){
       var done=(lot.submittedPieces||[]).length;var req=lot.requiredPcs;
       var lotDone=done>=req||lot.submitted;
-      var isCurrentLot=isCurrentSec&&li===currentLotIdx;
-      var lotLocked=!lotDone&&!isCurrentLot&&(!isCurrentSec||li>currentLotIdx);
       var lotClosed=lot.closed&&!lotDone;
       var pct=req>0?Math.min(Math.round(done/req*100),100):0;
-      var numBg=lotDone?'#10b981':isCurrentLot?'#3b82f6':lotClosed?'#d97706':'rgba(30,58,138,0.12)';
-      var numColor=lotDone||isCurrentLot||lotClosed?'#fff':'#9ab';
-      var numIcon=lotDone?'&#10003;':lotClosed?'&#9208;':lotLocked?'&#128274;':(li+1);
-      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:'+(lotDone?'rgba(16,185,129,0.04)':isCurrentLot?'rgba(59,130,246,0.06)':'#fff')+';border:1px solid '+(lotDone?'rgba(16,185,129,0.25)':isCurrentLot?'rgba(59,130,246,0.4)':'rgba(30,58,138,0.08)')+';border-radius:10px;margin-bottom:6px;opacity:'+(lotLocked&&!lotClosed?'0.4':'1')+'">'+
+      var numBg=lotDone?'#10b981':lotClosed?'#d97706':done>0?'#3b82f6':'rgba(30,58,138,0.12)';
+      var numColor=lotDone||lotClosed||done>0?'#fff':'#9ab';
+      var numIcon=lotDone?'&#10003;':lotClosed?'&#9208;':(li+1);
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:'+(lotDone?'rgba(16,185,129,0.04)':done>0?'rgba(59,130,246,0.04)':'#fff')+';border:1px solid '+(lotDone?'rgba(16,185,129,0.25)':done>0?'rgba(59,130,246,0.3)':'rgba(30,58,138,0.08)')+';border-radius:10px;margin-bottom:6px">'+
         '<div style="width:28px;height:28px;border-radius:50%;background:'+numBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
         '<span style="font-size:11px;font-weight:800;color:'+numColor+'">'+numIcon+'</span></div>'+
         '<div style="flex:1;min-width:0">'+
         '<p style="margin:0;font-size:12px;color:#4a6080;font-weight:600">&#128202; '+lot.lotId+'</p>'+
         '<p style="margin:2px 0;font-size:14px;font-weight:800;color:#1e3a8a">'+lot.length+'m &nbsp;|&nbsp; '+lot.grade+'</p>'+
         (lotDone?'<p style="margin:0;font-size:11px;color:#059669;font-weight:600">&#9989; Done</p>':
-         isCurrentLot?'<div style="margin-top:4px;background:#e8edf2;border-radius:10px;height:4px"><div style="background:#3b82f6;border-radius:10px;height:4px;width:'+pct+'%"></div></div>':
          lotClosed?'<p style="margin:0;font-size:11px;color:#d97706;font-weight:600">&#9208; Paused</p>':
-         '<p style="margin:0;font-size:10px;color:#bbb;font-style:italic">&#128274; Locked</p>')+
+         done>0?'<div style="margin-top:4px;background:#e8edf2;border-radius:10px;height:4px"><div style="background:#3b82f6;border-radius:10px;height:4px;width:'+pct+'%"></div></div>':'')+
         '</div>'+
         '<div style="text-align:right;flex-shrink:0">'+
         '<span class="counter-badge '+(lotDone?'counter-done':'counter-ok')+'">'+done+'/'+req+'</span>'+
-        (isCurrentLot&&!secLocked?'<div style="margin-top:6px"><button data-ro-go-step="'+si+'_'+li+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">'+(done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
+        (!lotDone&&!lotClosed?'<div style="margin-top:6px"><button data-ro-go-step="'+si+'_'+li+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">'+(done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
         '</div></div>';
     }).join('');
-    return '<div style="background:'+secBg+';border:2px solid '+secBorder+';border-radius:14px;padding:14px;margin-bottom:12px;opacity:'+(secLocked?'0.35':'1')+'">'+
+    return '<div style="background:'+secBg+';border:2px solid '+secBorder+';border-radius:14px;padding:14px;margin-bottom:12px">'+
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'+
       '<div style="flex:1">'+
       '<p style="margin:0;font-size:13px;font-weight:800;color:#1e3a8a">&#128196; Section '+(si+1)+': '+sec.sectionSize+'</p>'+
       '<p style="margin:2px 0 0;font-size:11px;color:#4a6080">'+(sec.lots||[]).length+' lot(s) | '+
       (secDone?'<span style="color:#059669;font-weight:700">&#9989; Completed</span>':
        secClosed?'<span style="color:#d97706;font-weight:700">&#9208; Paused by supervisor</span>':
-       isCurrentSec?'<span style="color:#3b82f6;font-weight:700">&#9654; In Progress</span>':
-       secLocked?'<span style="color:#9ab;">&#128274; Locked</span>':'')+
+       '<span style="color:#3b82f6;font-weight:700">&#9654; In Progress</span>')+
       '</p></div>'+
       '</div>'+
       lotsHtml+'</div>';
