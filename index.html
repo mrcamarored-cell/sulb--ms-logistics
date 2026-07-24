@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head> 
+<head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Delivery Note System — SULB</title>
@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.3.8";
+const VERSION="v1.4.0";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -105,7 +105,7 @@ async function loadListMode(){try{const doc=await db.collection("settings").doc(
 function listenReservations(){if(unsubReservations)unsubReservations();unsubReservations=db.collection("reservations").onSnapshot(function(snap){reservedBatches={};snap.docs.forEach(function(d){var data=d.data();var age=(Date.now()-(data.ts||0))/1000;if(age<300)reservedBatches[d.id]={workerName:data.workerName,workerId:data.workerId};});});}
 async function reserveBatch(batch){if(!batch)return;try{await db.collection("reservations").doc(batch).set({workerName:S.workerName,workerId:S.workerId,ts:Date.now(),date:fmtDate(new Date())});if(!myReservations.includes(batch))myReservations.push(batch);}catch(e){}}
 async function releaseMyReservations(){for(var i=0;i<myReservations.length;i++){try{await db.collection("reservations").doc(myReservations[i]).delete();}catch(e){}}myReservations=[];}
-function listenRollingOrders(){if(unsubRO)unsubRO();unsubRO=db.collection("rollingOrders").orderBy("createdAt","desc").onSnapshot(function(snap){roOrders=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});draw();});}
+function listenRollingOrders(){if(unsubRO)unsubRO();unsubRO=db.collection("rollingOrders").orderBy("createdAt","desc").onSnapshot(function(snap){roOrders=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});if(isSafeToRedraw())draw();});}
 async function saveRollingOrder(orderData){try{var ref=await db.collection("rollingOrders").add(Object.assign({},orderData,{createdAt:firebase.firestore.FieldValue.serverTimestamp(),createdBy:S.supervisorName||S.uname,date:fmtDate(new Date()),status:"active"}));return ref.id;}catch(e){alert("Error saving order: "+e.message);return null;}}
 async function updateRollingOrderPieces(orderId,secIdx,lotIdx,newPieces,markSubmitted){
   try{
@@ -373,6 +373,21 @@ async function loadTransferOrders(workerId){
     transferOrders=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());})
       .filter(function(t){return t.status==="pending"&&(!workerId||t.assignedWorkerId===workerId);});
   }catch(e){transferOrders=[];console.warn("loadTransferOrders:",e);}
+}
+// Returns false when user is actively filling a form — prevents listener redraws from wiping inputs
+function isSafeToRedraw(){
+  // Admin tabs with input forms
+  if(S.role==="admin"&&(S.adminTab==="workers"||S.adminTab==="supervisors"||S.adminTab==="remarks"||S.adminTab==="settings"))return false;
+  // Supervisor/Admin creating a rolling order
+  if(S.supTab==="rolling"||S.adminTab==="rolling"){
+    var container=document.getElementById("roSectionsContainer");
+    if(container){
+      // Check if any input in the form has a value
+      var inputs=container.querySelectorAll("input");
+      for(var i=0;i<inputs.length;i++){if(inputs[i].value.trim())return false;}
+    }
+  }
+  return true;
 }
 function ss(u){Object.assign(S,u);draw();}
 function draw(){var active=document.activeElement;var aid=active?active.id:null;var adr=active?active.dataset.r:null;var adf=active?active.dataset.f:null;var ac=active&&active.selectionStart!=null?active.selectionStart:null;document.getElementById("app").innerHTML=html();bind();if(aid){var el=document.getElementById(aid);if(el){el.focus();if(ac!=null){try{el.setSelectionRange(ac,ac);}catch(e){}}}}else if(adr!=null&&adf!=null){var inputs=document.querySelectorAll(".ri");for(var i=0;i<inputs.length;i++){if(inputs[i].dataset.r===adr&&inputs[i].dataset.f===adf){inputs[i].focus();if(ac!=null){try{inputs[i].setSelectionRange(ac,ac);}catch(e){}}break;}}}}
@@ -1240,7 +1255,7 @@ function bind(){
   document.querySelectorAll("[data-dc]").forEach(function(b){b.onclick=async function(e){var sid=e.target.dataset.dc;var ridx=e.target.dataset.ridx;if(ridx!==undefined){var sess=S.sessions.find(function(x){return x.id===sid;});if(!sess)return;if(!confirm("Remove this piece?"))return;var nr=(sess.rows||[]).filter(function(r,i){return i!==parseInt(ridx);});try{await db.collection("deliveryNotes").doc(sid).update({rows:nr});var rr=(sess.rows||[])[parseInt(ridx)];if(rr&&rr.batchNo){try{await db.collection("reservations").doc(rr.batchNo).delete();}catch(ex){}}ss({delC:null});}catch(e){alert("Error.");}}else{if(!confirm("Delete request permanently?"))return;try{await db.collection("deliveryNotes").doc(sid).delete();ss({delC:null});}catch(e){alert("Error.");}}};});
   var bdc=document.getElementById("btnDC");if(bdc) bdc.onclick=function(){ss({delC:null});};
 }
-function load(){ss({loading:true});unsub=db.collection("deliveryNotes").orderBy("createdAt","desc").onSnapshot(function(snap){ss({sessions:snap.docs.map(function(d){return Object.assign({id:d.id},d.data());}),loading:false});});}
+function load(){ss({loading:true});unsub=db.collection("deliveryNotes").orderBy("createdAt","desc").onSnapshot(function(snap){if(isSafeToRedraw())ss({sessions:snap.docs.map(function(d){return Object.assign({id:d.id},d.data());}),loading:false});else{S.sessions=snap.docs.map(function(d){return Object.assign({id:d.id},d.data());});S.loading=false;}});}
 async function loadPasswords(){try{var doc=await db.collection("settings").doc("passwords").get();if(doc.exists){var data=doc.data();if(data.worker)CREDS.Work.pw=data.worker;if(data.supervisor)CREDS.Super.pw=data.supervisor;if(data.admin)CREDS.Admin.pw=data.admin;}}catch(e){}}
 async function loadRemarks(){try{var doc=await db.collection("settings").doc("remarks").get();remarksOptions=doc.exists?(doc.data().options||remarksOptions):remarksOptions;}catch(e){}}
 async function loadColumnMapping(){try{var doc=await db.collection("settings").doc("columnMapping").get();if(doc.exists)columnMapping=doc.data().mapping||null;}catch(e){}}
@@ -1248,9 +1263,9 @@ async function loadDynamicWorkers(){try{var doc=await db.collection("settings").
 async function loadDynamicSupervisors(){try{var doc=await db.collection("settings").doc("supervisors").get();if(doc.exists&&doc.data().supervisors){dynamicSupervisors=doc.data().supervisors;}else{dynamicSupervisors=Object.assign({},SUPERVISORS);await db.collection("settings").doc("supervisors").set({supervisors:dynamicSupervisors});}}catch(e){dynamicSupervisors=Object.assign({},SUPERVISORS);}}
 async function registerPresence(name,role){try{if(!presenceId)presenceId=sessionStorage.getItem('presenceId');if(!presenceId){presenceId=Date.now().toString(36)+Math.random().toString(36).slice(2);sessionStorage.setItem('presenceId',presenceId);}await db.collection("presence").doc(presenceId).set({name:name,role:role,loginTime:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}),lastSeen:Date.now(),lastSeenFmt:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})});if(presenceInterval)clearInterval(presenceInterval);presenceInterval=setInterval(async function(){try{await db.collection("presence").doc(presenceId).update({lastSeen:Date.now(),lastSeenFmt:new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})});}catch(e){}},30000);}catch(e){}}
 async function removePresence(){if(presenceInterval){clearInterval(presenceInterval);presenceInterval=null;}if(!presenceId)presenceId=sessionStorage.getItem('presenceId');if(!presenceId)return;try{await db.collection("presence").doc(presenceId).delete();}catch(e){}presenceId=null;sessionStorage.removeItem('presenceId');}
-function listenPresence(){if(unsubPresence)unsubPresence();unsubPresence=db.collection("presence").onSnapshot(function(snap){var users=[];var now=Date.now();snap.docs.forEach(function(d){var data=d.data();if(data.lastSeen&&(now-data.lastSeen)<45000)users.push(data);});users.sort(function(a,b){return b.lastSeen-a.lastSeen;});ss({onlineUsers:users});});}
+function listenPresence(){if(unsubPresence)unsubPresence();unsubPresence=db.collection("presence").onSnapshot(function(snap){var users=[];var now=Date.now();snap.docs.forEach(function(d){var data=d.data();if(data.lastSeen&&(now-data.lastSeen)<45000)users.push(data);});users.sort(function(a,b){return b.lastSeen-a.lastSeen;});if(isSafeToRedraw())ss({onlineUsers:users});else S.onlineUsers=users;});}
 async function processUpload(rows,mapping){try{var items={};function getField(key,row,mp){var col=mp[key];if(!col||col==="__null__")return "";return String(row[col]||"");}rows.forEach(function(row){var bk=String(row[mapping.batchNo]||"").trim();var heat=String(row[mapping.heatNo]||"").trim();var strand=bk&&heat?bk.replace(heat,""):"";if(bk)items[bk]={batchNo:bk,heatNo:heat,strand:strand,rollingSize:getField("rollingSize",row,mapping),grade:getField("grade",row,mapping),length:getField("length",row,mapping),materialType:getField("materialType",row,mapping),availableStock:mapping.availableStock&&mapping.availableStock!=="__null__"?parseFloat(row[mapping.availableStock]||0):0,storageLocation:getField("storageLocation",row,mapping),storageBin:getField("storageBin",row,mapping)};});var upd=new Date().toLocaleString("en-GB");var keys=Object.keys(items);var CHUNK=500;var oldSnap=await db.collection("stock").get();for(var i=0;i<oldSnap.docs.length;i+=CHUNK){var db1=db.batch();oldSnap.docs.slice(i,i+CHUNK).forEach(function(d){db1.delete(d.ref);});await db1.commit();}for(var j=0;j<keys.length;j+=CHUNK){var db2=db.batch();keys.slice(j,j+CHUNK).forEach(function(k){db2.set(db.collection("stock").doc(k.replace(/[/]/g,"_")),items[k]);});await db2.commit();}await db.collection("settings").doc("stockMeta").set({updatedAt:upd});await db.collection("settings").doc("columnMapping").set({mapping:mapping,savedAt:upd});stockData=items;stockLastUpdate=upd;showMappingScreen=false;pendingUploadRows=[];pendingFileColumns=[];alert("Stock uploaded! "+keys.length+" pieces.");draw();}catch(err){alert("Error: "+err.message);}}
-function xlExport(s){var wb=XLSX.utils.book_new();var wn=(s.workerName||"Worker").replace(/\s+/g,"_");var sn=s.header&&s.header.sheetNo?s.header.sheetNo:"";var dt=s.header&&s.header.date?s.header.date.replace(/-/g,""):"";var supN=(S.supervisorName||"").replace(/\s+/g,"_");var fn="DeliveryNote_"+wn+(sn?"_"+sn:"")+(dt?"_"+dt:"")+(supN?"_"+supN:"")+".xlsx";var ws=XLSX.utils.aoa_to_sheet([["DELIVERY NOTE - SULB Company | MS Logistics"],[],["Sheet No.",sn,"","Date:",s.header?s.header.date:""],["Operator:",s.workerName||"","","ID:",s.workerId||""],["Start:",s.header?s.header.startTime:"","","End:",s.header?s.header.endTime:""],["Duration:",s.timeTaken||""],[],["Sr.","Batch No.","Heat No.","Strand","Rolling Size","Material Type","Grade","Length","Qty (MT)","From","To","Remarks"],...(s.rows||[]).map(function(r,i){return [i+1,r.batchNo,r.heatNo,r.strand,r.rollingSize,r.materialType,r.grade,r.length,r.quantity,r.locationFrom,r.locationTo,r.remarks];})]);ws["!cols"]=[5,14,12,10,18,14,10,8,10,10,10,16].map(function(w){return {wch:w};});XLSX.utils.book_append_sheet(wb,ws,"Delivery Note");XLSX.writeFile(wb,fn);}
+function xlExport(s){var wb=XLSX.utils.book_new();var wn=(s.workerName||"Worker").replace(/\s+/g,"_");var sn=s.header&&s.header.sheetNo?s.header.sheetNo:"";var dt=s.header&&s.header.date?s.header.date.replace(/-/g,""):"";var supN=(S.supervisorName||"").replace(/\s+/g,"_");var fn="DeliveryNote_"+wn+(sn?"_"+sn:"")+(dt?"_"+dt:"")+(supN?"_"+supN:"")+".xlsx";var isRolling=s.listMode==="rolling";var ws=XLSX.utils.aoa_to_sheet([["DELIVERY NOTE - SULB Company | MS Logistics"],[],["Sheet No.",sn,"","Date:",s.header?s.header.date:""],["Operator:",s.workerName||"","","ID:",s.workerId||""],["Start:",s.header?s.header.startTime:"","","End:",s.header?s.header.endTime:""],["Duration:",s.timeTaken||""],[],[isRolling?"Sr.":"Sr.","Batch No.","Heat No.","Strand","Rolling Size","Material Type","Grade","Length","Qty (MT)","From","To","Remarks"].concat(isRolling?["Rolling Lot"]:[]),...(s.rows||[]).map(function(r,i){return [i+1,r.batchNo,r.heatNo,r.strand,r.rollingSize,r.materialType,r.grade,r.length,r.quantity,r.locationFrom,r.locationTo,r.remarks].concat(isRolling?[r.rollingLot||""]:[]);})]);ws["!cols"]=[5,14,12,10,18,14,10,8,10,10,10,16].concat(isRolling?[14]:[]).map(function(w){return {wch:w};});XLSX.utils.book_append_sheet(wb,ws,"Delivery Note");XLSX.writeFile(wb,fn);}
 
 draw();
 </script>
