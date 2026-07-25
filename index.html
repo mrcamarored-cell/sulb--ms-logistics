@@ -76,7 +76,7 @@ td{padding:6px 8px;border-bottom:1px solid rgba(30,58,138,0.06);color:#2d4a7a;fo
 <div id="app"></div>
 <script>
 const LOGO="https://i.ibb.co/b5q0mjbt/IMG-7714.jpg";
-const VERSION="v1.4.0";
+const VERSION="v1.5.0";
 firebase.initializeApp({apiKey:"AIzaSyDEMCwTFhtbdHVcY2BTFl_3e_hFUWklUiI",authDomain:"delivery-note-sheet.firebaseapp.com",projectId:"delivery-note-sheet",storageBucket:"delivery-note-sheet.firebasestorage.app",messagingSenderId:"150874743555",appId:"1:150874743555:web:17b88acc92636639dd3f36"});
 const db=firebase.firestore();
 const CREDS={Work:{pw:"Har@2026",role:"worker"},Super:{pw:"Sulb@2026",role:"supervisor"},Admin:{pw:"Admin@2026",role:"admin"}};
@@ -97,7 +97,7 @@ let allBatchNos=new Set(),startTime=null,stockData={},stockLastUpdate="",listMod
 // Stock search state — one var per field
 let stkHeat="",stkBatch="",stkGrade="",stkLength="",stkLocation="",stkMatType="";
 let roOrders=[],roActiveOrder=null,roActiveStep=null,roActiveLot=null,roActiveLength=null,roAiLoading=false,roPendingData=null,unsubRO=null;
-let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,transferWorkerScreen:false,trPieces:{},trLocTo:"",trSel:{},trBulkLoc:"",roExpandedOrder:null,roEditingLot:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
+let S={role:null,uname:"",workerStep:false,workerId:"",workerName:"",workerIdErr:"",supervisorStep:false,supervisorId:"",supervisorName:"",supervisorIdErr:"",adminTab:"online",onlineUsers:[],submitted:false,saving:false,timeTaken:"",sessions:[],loading:false,delC:null,hdr:{sheetNo:"",date:fmtDate(new Date()),operator:"",startTime:"",endTime:""},rows:[er()],logoutMsg:false,supTab:"requests",roWorkerScreen:false,transferWorkerScreen:false,trPieces:{},trLocTo:"",trSel:{},trBulkLoc:"",roExpandedOrder:null,roEditingLot:null,roAssigningLot:null,roPieceStatus:{},roHeatNo:'',roStrand:'',roBatchNo:'',roQty:'',roLocFrom:'',roRemarks:''};
 let unsub=null,unsubReservations=null,unsubPresence=null;
 async function loadAllBatchNos(){try{const snap=await db.collection("deliveryNotes").get();allBatchNos=new Set();snap.docs.forEach(function(d){var data=d.data();if(data.rows)data.rows.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});});}catch(e){}}
 async function loadStockFromDB(){try{var snap=await db.collection("stock").get();stockData={};snap.docs.forEach(function(d){var data=d.data();if(data.batchNo)stockData[data.batchNo]=data;});var meta=await db.collection("settings").doc("stockMeta").get();stockLastUpdate=meta.exists?(meta.data().updatedAt||""):"";}catch(e){}}
@@ -175,6 +175,16 @@ async function updateLotData(orderId,secIdx,lotIdx,newLotId,newGrade,newLength,n
     if(!sections[secIdx]||!sections[secIdx].lots[lotIdx])return;
     var lot=sections[secIdx].lots[lotIdx];
     lot.lotId=newLotId;lot.grade=newGrade;lot.length=newLength;lot.requiredPcs=newPcs;lot.key=newGrade+"_"+newLength;
+    await db.collection("rollingOrders").doc(orderId).update({sections:sections});
+  }catch(e){alert("Error: "+e.message);}
+}
+async function assignLotWorker(orderId,secIdx,lotIdx,workerId,workerName){
+  try{
+    var order=roOrders.find(function(o){return o.id===orderId;});if(!order)return;
+    var sections=JSON.parse(JSON.stringify(order.sections||[]));
+    if(!sections[secIdx]||!sections[secIdx].lots[lotIdx])return;
+    sections[secIdx].lots[lotIdx].assignedWorkerId=workerId||null;
+    sections[secIdx].lots[lotIdx].assignedWorkerName=workerName||null;
     await db.collection("rollingOrders").doc(orderId).update({sections:sections});
   }catch(e){alert("Error: "+e.message);}
 }
@@ -569,6 +579,7 @@ function roWorkerHTML(){
     var lot=sec?(sec.lots||[])[lotIdx]:null;
     if(!lot){roActiveStep=null;return roWorkerHTML();}
     var d3=(lot.submittedPieces||[]).length;var r3=lot.requiredPcs;var done3=d3>=r3;
+    var unsentCount=(lot.submittedPieces||[]).filter(function(p){return !p.sentToSupervisor;}).length;
     var roStatus=S.roPieceStatus||{};
     var statusMsg='';
     if(roStatus.notFound)statusMsg='<div class="warn-yellow">&#10007; Batch <strong>'+roStatus.batch+'</strong> not found in stock.</div>';
@@ -625,7 +636,13 @@ function roWorkerHTML(){
         remarksOptions.map(function(o2){return '<option value="'+o2+'"'+(S.roRemarks===o2?' selected':'')+'>'+o2+'</option>';}).join('')+
         '</select></div>'+
         '<button class="bp" id="btnRoSubmitPiece" style="margin-top:12px"'+(roStatus.mismatch?' disabled':'')+'>Submit Piece &#10003;</button>'+
-        '</div>'
+        '</div>'+
+        (unsentCount>0?
+          '<div style="background:rgba(245,158,11,0.06);border:2px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px;margin-top:12px">'+
+          '<p style="font-size:13px;font-weight:800;color:#d97706;margin:0 0 4px">&#128337; End of shift?</p>'+
+          '<p style="font-size:12px;color:#92400e;margin:0 0 10px">Send '+unsentCount+' piece(s) to supervisor now. The lot stays open for the remaining '+Math.max(0,r3-d3)+'.</p>'+
+          '<button id="btnRoPartialSubmit" style="background:linear-gradient(135deg,#d97706,#f59e0b);border:none;border-radius:10px;padding:11px;color:#fff;font-weight:700;font-size:13px;width:100%;cursor:pointer">&#128228; Submit '+unsentCount+' Piece(s) &amp; Keep Lot Open</button>'+
+          '</div>':'')
       )+'</div>';
   }
   var totalDone=sections.reduce(function(s,sec){return s+(sec.lots||[]).reduce(function(s2,l){return s2+(l.submittedPieces||[]).length;},0);},0);
@@ -647,11 +664,12 @@ function roWorkerHTML(){
       var done=(lot.submittedPieces||[]).length;var req=lot.requiredPcs;
       var lotDone=done>=req||lot.submitted;
       var lotClosed=lot.closed&&!lotDone;
+      var lotMine=!lot.assignedWorkerId||lot.assignedWorkerId===S.workerId;
       var pct=req>0?Math.min(Math.round(done/req*100),100):0;
       var numBg=lotDone?'#10b981':lotClosed?'#d97706':done>0?'#3b82f6':'rgba(30,58,138,0.12)';
       var numColor=lotDone||lotClosed||done>0?'#fff':'#9ab';
       var numIcon=lotDone?'&#10003;':lotClosed?'&#9208;':(li+1);
-      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:'+(lotDone?'rgba(16,185,129,0.04)':done>0?'rgba(59,130,246,0.04)':'#fff')+';border:1px solid '+(lotDone?'rgba(16,185,129,0.25)':done>0?'rgba(59,130,246,0.3)':'rgba(30,58,138,0.08)')+';border-radius:10px;margin-bottom:6px">'+
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:'+(lotDone?'rgba(16,185,129,0.04)':done>0?'rgba(59,130,246,0.04)':'#fff')+';border:1px solid '+(lotDone?'rgba(16,185,129,0.25)':done>0?'rgba(59,130,246,0.3)':'rgba(30,58,138,0.08)')+';border-radius:10px;margin-bottom:6px;opacity:'+(!lotMine&&!lotDone?'0.45':'1')+'">'+
         '<div style="width:28px;height:28px;border-radius:50%;background:'+numBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
         '<span style="font-size:11px;font-weight:800;color:'+numColor+'">'+numIcon+'</span></div>'+
         '<div style="flex:1;min-width:0">'+
@@ -659,11 +677,12 @@ function roWorkerHTML(){
         '<p style="margin:2px 0;font-size:14px;font-weight:800;color:#1e3a8a">'+lot.length+'m &nbsp;|&nbsp; '+lot.grade+'</p>'+
         (lotDone?'<p style="margin:0;font-size:11px;color:#059669;font-weight:600">&#9989; Done</p>':
          lotClosed?'<p style="margin:0;font-size:11px;color:#d97706;font-weight:600">&#9208; Paused</p>':
+         !lotMine?'<p style="margin:0;font-size:11px;color:#9ab;font-weight:600">&#128100; '+(lot.assignedWorkerName||'Another worker')+'</p>':
          done>0?'<div style="margin-top:4px;background:#e8edf2;border-radius:10px;height:4px"><div style="background:#3b82f6;border-radius:10px;height:4px;width:'+pct+'%"></div></div>':'')+
         '</div>'+
         '<div style="text-align:right;flex-shrink:0">'+
         '<span class="counter-badge '+(lotDone?'counter-done':'counter-ok')+'">'+done+'/'+req+'</span>'+
-        (!lotDone&&!lotClosed?'<div style="margin-top:6px"><button data-ro-go-step="'+si+'_'+li+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">'+(done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
+        (!lotDone&&!lotClosed&&lotMine?'<div style="margin-top:6px"><button data-ro-go-step="'+si+'_'+li+'" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;font-size:12px;cursor:pointer">'+(done>0?'&#128260; Continue':'&#9654; Start')+'</button></div>':'')+
         '</div></div>';
     }).join('');
     return '<div style="background:'+secBg+';border:2px solid '+secBorder+';border-radius:14px;padding:14px;margin-bottom:12px">'+
@@ -726,14 +745,26 @@ function roSupHTML(){
                   '<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(isEditingLot?'10px':'0')+'">'+
                   '<div style="width:22px;height:22px;border-radius:50%;background:'+(ok?'#10b981':lot.closed?'#d97706':'rgba(30,58,138,0.12)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
                   '<span style="font-size:10px;font-weight:800;color:'+(ok||lot.closed?'#fff':'#4a6080')+'">'+(ok?'&#10003;':lot.closed?'&#9208;':(li+1))+'</span></div>'+
-                  '<div style="flex:1"><p style="font-size:11px;font-weight:700;color:#1e3a8a;margin:0">&#128202; '+lot.lotId+' &nbsp;|&nbsp; '+lot.length+'m &nbsp;|&nbsp; '+lot.grade+' &nbsp;|&nbsp; Pcs: '+lot.requiredPcs+'</p></div>'+
+                  '<div style="flex:1"><p style="font-size:11px;font-weight:700;color:#1e3a8a;margin:0">&#128202; '+lot.lotId+' &nbsp;|&nbsp; '+lot.length+'m &nbsp;|&nbsp; '+lot.grade+' &nbsp;|&nbsp; Pcs: '+lot.requiredPcs+'</p>'+(lot.assignedWorkerName?'<p style="font-size:10px;color:#d97706;font-weight:600;margin:2px 0 0">&#128100; '+lot.assignedWorkerName+'</p>':'')+'</div>'+
                   '<span class="counter-badge '+(ok?'counter-done':'counter-ok')+'" style="font-size:10px">'+ld+'/'+lr+'</span>'+
                   '<div style="display:flex;gap:3px;flex-shrink:0">'+
                   (li>0?'<button data-lot-up="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:4px;padding:2px 6px;color:#1e3a8a;font-size:10px;cursor:pointer">&#9650;</button>':'')+
                   (li<(sec.lots||[]).length-1?'<button data-lot-down="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(30,58,138,0.08);border:1px solid rgba(30,58,138,0.15);border-radius:4px;padding:2px 6px;color:#1e3a8a;font-size:10px;cursor:pointer">&#9660;</button>':'')+
+                  (!ok?'<button data-lot-assign="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(217,119,6,0.1);border:1px solid rgba(217,119,6,0.3);border-radius:4px;padding:2px 6px;color:#d97706;font-size:10px;cursor:pointer" title="Assign worker">&#128100;</button>':'')+
                   (!ok?'<button data-lot-edit="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:4px;padding:2px 6px;color:#2563eb;font-size:10px;cursor:pointer">&#9998;</button>':'')+
                   (!ok?'<button data-lot-del="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:4px;padding:2px 6px;color:#dc2626;font-size:10px;cursor:pointer">&#128465;</button>':'')+
                   '</div></div>'+
+                  (S.roAssigningLot===o.id+'_'+si+'_'+li?
+                    '<div style="background:rgba(217,119,6,0.05);border:1px solid rgba(217,119,6,0.25);border-radius:8px;padding:10px;margin-top:6px">'+
+                    '<label style="font-size:10px;color:#92400e;font-weight:700;display:block;margin-bottom:4px">Assign this lot to worker</label>'+
+                    '<select id="assignW_'+si+'_'+li+'" style="width:100%;padding:7px 8px;border:1px solid rgba(217,119,6,0.3);border-radius:6px;font-size:12px;color:#1e3a8a;background:#fff;height:auto;min-height:auto;margin-bottom:8px">'+
+                    '<option value="">-- Anyone (order default) --</option>'+
+                    Object.keys(dw).map(function(wid){return '<option value="'+wid+'"'+(lot.assignedWorkerId===wid?' selected':'')+'>'+wid+' — '+dw[wid]+'</option>';}).join('')+
+                    '</select>'+
+                    '<div style="display:flex;gap:6px">'+
+                    '<button data-lot-assign-save="'+o.id+'" data-ro-si="'+si+'" data-ro-li="'+li+'" style="flex:2;background:linear-gradient(135deg,#d97706,#f59e0b);border:none;border-radius:6px;padding:6px;color:#fff;font-weight:700;font-size:11px;cursor:pointer">&#10003; Assign</button>'+
+                    '<button data-lot-assign-cancel style="flex:1;background:#fff;border:1px solid rgba(30,58,138,0.2);border-radius:6px;padding:6px;color:#1e3a8a;font-size:11px;cursor:pointer">Cancel</button>'+
+                    '</div></div>':'')+
                   (isEditingLot?
                     '<div style="background:rgba(59,130,246,0.04);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px;margin-top:6px">'+
                     '<div style="margin-bottom:6px"><label style="font-size:10px;color:#4a6080;font-weight:600;display:block">Lot ID</label>'+
@@ -1036,6 +1067,17 @@ function bind(){
   document.querySelectorAll("[data-lot-del]").forEach(function(b){b.onclick=async function(){if(!confirm("Delete this lot?"))return;await deleteLotFromOrder(b.dataset.lotDel,parseInt(b.dataset.roSi),parseInt(b.dataset.roLi));};});
   document.querySelectorAll("[data-lot-edit]").forEach(function(b){b.onclick=function(){ss({roEditingLot:b.dataset.lotEdit+'_'+b.dataset.roSi+'_'+b.dataset.roLi});};});
   document.querySelectorAll("[data-lot-cancel]").forEach(function(b){b.onclick=function(){ss({roEditingLot:null});};});
+  document.querySelectorAll("[data-lot-assign]").forEach(function(b){b.onclick=function(){ss({roAssigningLot:b.dataset.lotAssign+'_'+b.dataset.roSi+'_'+b.dataset.roLi,roEditingLot:null});};});
+  document.querySelectorAll("[data-lot-assign-cancel]").forEach(function(b){b.onclick=function(){ss({roAssigningLot:null});};});
+  document.querySelectorAll("[data-lot-assign-save]").forEach(function(b){b.onclick=async function(){
+    var si=parseInt(b.dataset.roSi);var li=parseInt(b.dataset.roLi);
+    var sel=document.getElementById("assignW_"+si+"_"+li);
+    var wid=sel?sel.value:"";
+    var dwx=S.dynamicWorkers||WORKERS;
+    await assignLotWorker(b.dataset.lotAssignSave,si,li,wid||null,wid?(dwx[wid]||wid):null);
+    ss({roAssigningLot:null});
+  };});
+
   document.querySelectorAll("[data-lot-save]").forEach(function(b){b.onclick=async function(){
     var si=parseInt(b.dataset.roSi);var li=parseInt(b.dataset.roLi);
     var newId=(document.getElementById("editLotId_"+si+"_"+li)||{}).value||"";
@@ -1189,6 +1231,41 @@ function bind(){
     await saveRollingOrder({sections:sections,assignedToAll:assignedTo==="all",assignedWorkerId:assignedWorkerId,assignedWorkerName:assignedWorkerName});
     alert("\u2705 Rolling Instruction saved!");draw();
   };
+  var btnRoPartial=document.getElementById("btnRoPartialSubmit");
+  if(btnRoPartial) btnRoPartial.onclick=async function(){
+    if(btnRoPartial.disabled)return;
+    var order=roOrders.find(function(o){return o.id===roActiveOrder;});
+    if(!order||roActiveStep===null){alert("Error: order not found.");return;}
+    var pp=String(roActiveStep).split('_');
+    var pSecIdx=parseInt(pp[0]);var pLotIdx=parseInt(pp[1]);
+    var pSec=order.sections?order.sections[pSecIdx]:null;
+    var pLot=pSec?(pSec.lots||[])[pLotIdx]:null;
+    if(!pLot){alert("Lot not found.");return;}
+    var unsent=(pLot.submittedPieces||[]).filter(function(p){return !p.sentToSupervisor;});
+    if(!unsent.length){alert("No new pieces to submit.");return;}
+    if(!confirm("Send "+unsent.length+" piece(s) to supervisor?\nThe lot stays open for the rest."))return;
+    btnRoPartial.disabled=true;btnRoPartial.textContent="Submitting...";
+    var endT=new Date();var endStr=fmtTime(endT);
+    var rs=unsent.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),materialType:p.materialType||"",rollingSize:p.rollingSize||pSec.sectionSize||"",quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks||"",rollingLot:pLot.lotId};});
+    try{
+      await db.collection("deliveryNotes").add({
+        header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:unsent[0].time||endStr,endTime:endStr},
+        rows:rs,submittedBy:S.uname,workerName:S.workerName,workerId:S.workerId,
+        timeTaken:"N/A",listMode:"rolling",partial:true,
+        rollingOrderId:roActiveOrder,rollingLot:pLot.lotId,
+        createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+        timestamp:new Date().toLocaleString("en-GB")
+      });
+      rs.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});
+      var marked=(pLot.submittedPieces||[]).map(function(p){
+        if(!p.sentToSupervisor)return Object.assign({},p,{sentToSupervisor:true});
+        return p;
+      });
+      await updateRollingOrderPieces(roActiveOrder,pSecIdx,pLotIdx,marked,false);
+      alert("\u2705 "+rs.length+" piece(s) sent. Lot stays open.");
+      roActiveStep=null;draw();
+    }catch(e){alert("Error: "+e.message);btnRoPartial.disabled=false;btnRoPartial.textContent="Submit Piece(s) & Keep Lot Open";}
+  };
   var btnRoFinal=document.getElementById("btnRoFinalSubmit");
   if(btnRoFinal) btnRoFinal.onclick=async function(){
     if(btnRoFinal.disabled)return;
@@ -1200,12 +1277,22 @@ function bind(){
     var sec2=order.sections?order.sections[secIdx2]:null;
     var lot2=sec2?(sec2.lots||[])[lotIdx2]:null;
     if(!lot2||!lot2.submittedPieces||!lot2.submittedPieces.length){alert("No pieces to submit.");return;}
-    if(!confirm("Submit "+lot2.submittedPieces.length+" piece(s) to supervisor?"))return;
+    var toSend=lot2.submittedPieces.filter(function(p){return !p.sentToSupervisor;});
+    if(!toSend.length){
+      // All pieces already sent via partial submits — just close the lot
+      if(!confirm("All pieces were already sent. Close this lot?")){btnRoFinal.disabled=false;btnRoFinal.textContent="Submit to Supervisor \u2713";return;}
+      try{
+        await updateRollingOrderPieces(roActiveOrder,secIdx2,lotIdx2,lot2.submittedPieces,true);
+        alert("\u2705 Lot closed.");roActiveStep=null;draw();
+      }catch(e){alert("Error: "+e.message);}
+      return;
+    }
+    if(!confirm("Submit "+toSend.length+" piece(s) to supervisor?"))return;
     var endT=new Date();var endStr=fmtTime(endT);
-    var rs=lot2.submittedPieces.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),materialType:p.materialType||"",rollingSize:p.rollingSize||sec2.sectionSize||"",quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks||"",rollingLot:lot2.lotId};});
+    var rs=toSend.map(function(p){return {heatNo:p.heatNo,strand:p.strand,batchNo:p.batchNo,grade:p.grade,length:String(p.length),materialType:p.materialType||"",rollingSize:p.rollingSize||sec2.sectionSize||"",quantity:p.quantity,locationFrom:p.locationFrom,locationTo:p.locationTo,remarks:p.remarks||"",rollingLot:lot2.lotId};});
     try{
       await db.collection("deliveryNotes").add({
-        header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:lot2.submittedPieces[0].time||endStr,endTime:endStr},
+        header:{sheetNo:"",date:fmtDate(new Date()),operator:S.workerName,startTime:toSend[0].time||endStr,endTime:endStr},
         rows:rs,submittedBy:S.uname,workerName:S.workerName,workerId:S.workerId,
         timeTaken:"N/A",listMode:"rolling",
         rollingOrderId:roActiveOrder,rollingLot:roActiveLot,
@@ -1213,7 +1300,8 @@ function bind(){
         timestamp:new Date().toLocaleString("en-GB")
       });
       rs.forEach(function(r){if(r.batchNo)allBatchNos.add(r.batchNo);});
-      await updateRollingOrderPieces(roActiveOrder,secIdx2,lotIdx2,lot2.submittedPieces,true);
+      var allMarked=lot2.submittedPieces.map(function(p){return p.sentToSupervisor?p:Object.assign({},p,{sentToSupervisor:true});});
+      await updateRollingOrderPieces(roActiveOrder,secIdx2,lotIdx2,allMarked,true);
       alert("✅ Submitted successfully! Supervisor can see it now.");
       roActiveStep=null;draw();
     }catch(e){alert("Error submitting: "+e.message);}
